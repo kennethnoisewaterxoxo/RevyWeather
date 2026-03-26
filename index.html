@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Revelstoke Weather</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f1117;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    header h1 { font-size: 1.5rem; font-weight: 600; color: #f8fafc; }
+    header span { font-size: 0.85rem; color: #64748b; }
+
+    /* --- Tabs --- */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #2d3748;
+      padding-bottom: 0;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 8px 20px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .tab-btn:hover { color: #94a3b8; }
+
+    .tab-btn.active {
+      color: #f8fafc;
+      border-bottom-color: #38bdf8;
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* --- Charts --- */
+    #status { font-size: 0.8rem; color: #64748b; margin-bottom: 16px; }
+    #status.error { color: #f87171; }
+
+    .chart-container {
+      background: #1e2330;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .chart-container h2 {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .row { display: grid; grid-template-columns: 1fr 340px; gap: 16px; margin-bottom: 16px; }
+    .row .chart-container { margin-bottom: 0; }
+
+    .rose-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .rose-grid .chart-container { margin-bottom: 0; }
+
+    .tile-row { display: flex; gap: 16px; margin-bottom: 16px; }
+    .tile { background: #1e2330; border-radius: 12px; padding: 20px 28px; }
+    .tile-value { font-size: 2rem; font-weight: 600; color: #f8fafc; line-height: 1; }
+    .tile-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 6px; }
+
+    /* --- Station filter --- */
+    .filter-wrap { position: relative; margin-left: auto; }
+
+    #filter-btn, #fc-filter-btn {
+      background: #1e2330;
+      border: 1px solid #2d3748;
+      color: #94a3b8;
+      font-size: 0.82rem;
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #filter-btn:hover, #fc-filter-btn:hover { border-color: #475569; color: #e2e8f0; }
+
+    #filter-panel, #fc-filter-panel {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      background: #1e2330;
+      border: 1px solid #2d3748;
+      border-radius: 10px;
+      padding: 10px;
+      z-index: 999;
+      width: 240px;
+      max-height: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    #filter-panel.hidden, #fc-filter-panel.hidden { display: none; }
+
+    .filter-actions { display: flex; gap: 6px; }
+    .filter-actions button {
+      flex: 1;
+      background: #2d3748;
+      border: none;
+      color: #94a3b8;
+      font-size: 0.75rem;
+      padding: 4px 0;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .filter-actions button:hover { background: #3d4f6e; color: #e2e8f0; }
+
+    .filter-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+
+    .filter-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 6px;
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .filter-item:hover { background: #252d3d; }
+    .filter-item input[type=checkbox] { accent-color: #38bdf8; cursor: pointer; }
+    .filter-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .filter-name { font-size: 0.8rem; color: #cbd5e1; flex: 1; }
+    .filter-elev { font-size: 0.72rem; color: #475569; }
+
+    footer { font-size: 0.72rem; color: #334155; margin-top: 24px; }
+    footer a { color: #475569; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Revelstoke — Mountain Weather</h1>
+  <div class="filter-wrap">
+    <button id="filter-btn">Stations</button>
+    <div id="filter-panel" class="hidden">
+      <div class="filter-actions">
+        <button id="filter-all">All</button>
+        <button id="filter-none">Clear</button>
+      </div>
+      <div class="filter-list" id="filter-list"></div>
+    </div>
+  </div>
+  <div class="filter-wrap">
+    <button id="fc-filter-btn">Forecast</button>
+    <div id="fc-filter-panel" class="hidden">
+      <div class="filter-actions">
+        <button id="fc-filter-all">All</button>
+        <button id="fc-filter-none">Clear</button>
+      </div>
+      <div class="filter-list" id="fc-filter-list"></div>
+    </div>
+  </div>
+  <span id="updated"></span>
+</header>
+
+<div id="status">Loading station data...</div>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="temperature">Temperature</button>
+  <button class="tab-btn" data-tab="wind">Wind</button>
+  <button class="tab-btn" data-tab="precipitation">Precipitation</button>
+  <button class="tab-btn" data-tab="map">Map</button>
+</nav>
+
+<!-- Temperature tab -->
+<div id="tab-temperature" class="tab-panel active">
+  <div class="tile-row">
+    <div class="tile">
+      <div class="tile-value" id="tile-lapse-rate">—</div>
+      <div class="tile-label">Lapse Rate (°C / 100m)</div>
+    </div>
+    <div class="tile">
+      <div class="tile-value" id="tile-freeze-level">—</div>
+      <div class="tile-label">Current Freezing Level</div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="chart-container">
+      <h2>Last 48 Hours — Temperature (°C)</h2>
+      <div id="chart-temp-series" style="height:420px;"></div>
+    </div>
+    <div class="chart-container">
+      <h2>Current Profile — Temp vs Elevation</h2>
+      <div id="chart-temp-profile" style="height:420px;"></div>
+    </div>
+  </div>
+  <div class="chart-container">
+    <h2>Freezing Level — Observed &amp; Forecast</h2>
+    <div id="chart-freeze" style="height:260px;"></div>
+  </div>
+</div>
+
+<!-- Wind tab -->
+<div id="tab-wind" class="tab-panel">
+  <div class="row">
+    <div class="chart-container">
+      <h2>Last 48 Hours — Wind Speed &amp; Gusts (km/h)</h2>
+      <div id="chart-wind-series" style="height:420px;"></div>
+    </div>
+    <div class="chart-container">
+      <h2>Current Profile — Wind vs Elevation</h2>
+      <div id="chart-wind-profile" style="height:420px;"></div>
+    </div>
+  </div>
+  <div class="rose-grid" id="wind-roses"></div>
+</div>
+
+<!-- Precipitation tab -->
+<div id="tab-precipitation" class="tab-panel">
+  <div class="row">
+    <div class="chart-container">
+      <h2>Last 48 Hours — Precipitation (mm rain / cm snow)</h2>
+      <div id="chart-precip-series" style="height:420px;"></div>
+    </div>
+    <div class="chart-container">
+      <h2>48hr Accumulation by Elevation</h2>
+      <div id="chart-precip-profile" style="height:420px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Map tab -->
+<div id="tab-map" class="tab-panel">
+  <div class="chart-container" style="padding: 0; overflow: hidden;">
+    <div id="station-map" style="height: 640px; border-radius: 12px;"></div>
+  </div>
+</div>
+
+<footer>
+  Data: <a href="https://open-meteo.com/" target="_blank">Open-Meteo</a> (model) &bull;
+  <a href="https://avalanche.ca" target="_blank">Avalanche Canada / Parks Canada</a> (measured) &mdash;
+  All times local (Pacific)
+</footer>
+
+<script>
+// ---------------------------------------------------------------------------
+// Station definitions
+// ---------------------------------------------------------------------------
+// gridElevation: actual elevation of the Open-Meteo model grid point (queried manually)
+// elevation:     true physical elevation of the station
+// Where these differ we apply a standard env. lapse rate correction (0.0065°C/m) to temps
+const STATIONS = [
+  { name: 'Malakwa',              lat: 50.93416,    lon: -118.78866,  elevation: 335,  source: 'avalanche', stationId: 157, color: '#67e8f9' },
+  { name: 'Clanwilliam',          lat: 50.96248,    lon: -118.37800,  elevation: 610,  source: 'avalanche', stationId: 103, color: '#a3e635' },
+  { name: '50 Mile',              lat: 51.59917,    lon: -118.60111,  elevation: 650,  source: 'avalanche', stationId: 133, color: '#86efac' },
+  { name: 'Heather Hill',         lat: 51.446037,   lon: -117.47545,  elevation: 915,  source: 'avalanche', stationId: 94,  color: '#fde68a' },
+  { name: 'Albert Canyon',        lat: 51.18808,    lon: -117.75616,  elevation: 999,  source: 'avalanche', stationId: 135, color: '#6ee7b7' },
+  { name: 'McCulloch',            lat: 49.75778,    lon: -119.12639,  elevation: 1200, source: 'avalanche', stationId: 158, color: '#fb7185' },
+  { name: 'Victor Main',          lat: 50.93106,    lon: -118.40226,  elevation: 1255, source: 'avalanche', stationId: 131, color: '#22d3ee' },
+  { name: 'Rogers Pass',          lat: 51.300423,   lon: -117.51551,  elevation: 1315, source: 'avalanche', stationId: 98,  color: '#fbbf24' },
+  { name: 'Galena Pass',          lat: 50.70806,    lon: -117.75500,  elevation: 1570, source: 'avalanche', stationId: 40,  color: '#818cf8' },
+  { name: 'Corbin Pass Low',      lat: 51.19333,    lon: -117.77111,  elevation: 1615, source: 'avalanche', stationId: 34,  color: '#a5b4fc' },
+  { name: 'Caribou Ridge',        lat: 51.51833,    lon: -118.46167,  elevation: 1740, source: 'avalanche', stationId: 37,  color: '#c084fc' },
+  { name: 'Mt Fidelity',          lat: 51.234383,   lon: -117.700966, elevation: 1905, source: 'avalanche', stationId: 93,  color: '#f97316' },
+  { name: 'MacDonald W Shoulder', lat: 51.300884,   lon: -117.48084,  elevation: 1930, source: 'avalanche', stationId: 96,  color: '#f472b6' },
+  { name: 'Klotz',                lat: 51.062191,   lon: -117.973927, elevation: 1975, source: 'avalanche', stationId: 165, color: '#e879f9' },
+  { name: 'Corbin Pass High',     lat: 51.20083,    lon: -117.77778,  elevation: 2135, source: 'avalanche', stationId: 35,  color: '#e0aaff' },
+  { name: 'Rockfall',             lat: 51.4304344,  lon: -117.43692,  elevation: 2240, source: 'avalanche', stationId: 97,  color: '#fed7aa' },
+];
+
+// Forecast reference locations and models (Open-Meteo, next 72h)
+const FORECAST_POINTS = [
+  { name: 'Gold Range',  lat: 50.72, lon: -118.29, color: '#94a3b8' },
+  { name: 'Rogers Pass', lat: 51.30, lon: -117.54, color: '#cbd5e1' },
+];
+const FORECAST_MODELS = [
+  { id: 'best_match',   label: 'Open-Meteo', dash: 'solid'   },
+  { id: 'gfs_seamless', label: 'GFS',        dash: 'dash'    },
+  { id: 'ecmwf_ifs025', label: 'ECMWF',      dash: 'dot'     },
+  { id: 'gem_seamless', label: 'GEM',        dash: 'dashdot' },
+];
+let forecastData = [];
+
+const LAPSE_RATE = 0.0065; // °C per metre
+
+const COMPASS_DEG = {
+  N:0, NNE:22.5, NE:45, ENE:67.5, E:90, ESE:112.5, SE:135, SSE:157.5,
+  S:180, SSW:202.5, SW:225, WSW:247.5, W:270, WNW:292.5, NW:315, NNW:337.5,
+};
+
+const TZ = 'America%2FVancouver';
+
+const PLOT_DEFAULTS = { responsive: true, displayModeBar: false };
+
+const BASE_LAYOUT = {
+  paper_bgcolor: '#1e2330',
+  plot_bgcolor:  '#1e2330',
+  font: { color: '#94a3b8', size: 12 },
+};
+
+const AXIS_STYLE = {
+  gridcolor: '#2d3748',
+  linecolor: '#2d3748',
+};
+
+// ---------------------------------------------------------------------------
+// Fetch
+// ---------------------------------------------------------------------------
+async function fetchStation(station) {
+  if (station.source === 'avalanche') return fetchAvalancheStation(station);
+  return fetchOpenMeteoStation(station);
+}
+
+async function fetchOpenMeteoStation(station) {
+  const url = `https://api.open-meteo.com/v1/forecast`
+    + `?latitude=${station.lat}&longitude=${station.lon}`
+    + `&hourly=temperature_2m,windspeed_10m,windgusts_10m,winddirection_10m,precipitation,rain,snowfall,snow_depth`
+    + `&past_days=2&forecast_days=1`
+    + `&wind_speed_unit=kmh`
+    + `&timezone=${TZ}`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${station.name}`);
+  const data = await res.json();
+
+  // Apply lapse rate correction for stations where the model grid point
+  // is significantly lower than the true elevation
+  const elevDiff = station.elevation - station.gridElevation;
+  const correction = LAPSE_RATE * elevDiff;
+  const rawTemps = data.hourly.temperature_2m;
+  const correctedTemps = rawTemps.map(t => t === null ? null : +(t - correction).toFixed(1));
+
+  return {
+    ...station,
+    times:     data.hourly.time,
+    temps:     correctedTemps,
+    winds:     data.hourly.windspeed_10m,
+    gusts:     data.hourly.windgusts_10m,
+    winddir:   data.hourly.winddirection_10m,
+    precip:    data.hourly.precipitation,
+    rain:      data.hourly.rain,
+    snowfall:  data.hourly.snowfall,
+    snowdepth: data.hourly.snow_depth,
+  };
+}
+
+async function fetchAvalancheStation(station) {
+  const url = `https://weather.prod.avalanche.ca/stations/${station.stationId}/measurements`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${station.name}`);
+  const rows = await res.json();
+
+  // Keep past 3 days, sort ascending
+  const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  const sorted = rows
+    .filter(r => new Date(r.measurementDateTime) >= cutoff)
+    .sort((a, b) => new Date(a.measurementDateTime) - new Date(b.measurementDateTime));
+
+  return {
+    ...station,
+    times:     sorted.map(r => r.measurementDateTime),
+    temps:     sorted.map(r => r.airTempAvg ?? null),
+    winds:     sorted.map(r => r.windSpeedAvg  != null ? +r.windSpeedAvg.toFixed(1)  : null),
+    gusts:     sorted.map(r => r.windSpeedGust != null ? +r.windSpeedGust.toFixed(1) : null),
+    winddir:   sorted.map(r => COMPASS_DEG[r.windDirCompass] ?? null),
+    precip:    sorted.map(r => r.hourlyPrecip != null ? Math.max(0, r.hourlyPrecip) : null),
+    rain:      sorted.map(() => null),
+    snowfall:  sorted.map(() => null),
+    snowdepth: sorted.map(r => r.snowHeight ?? null),
+  };
+}
+
+async function fetchForecastPoint(pt, model = FORECAST_MODELS[0]) {
+  const modelParam = model.id !== 'best_match' ? `&models=${model.id}` : '';
+  const url = `https://api.open-meteo.com/v1/forecast`
+    + `?latitude=${pt.lat}&longitude=${pt.lon}`
+    + `&hourly=temperature_2m,windspeed_10m,precipitation,freezinglevel_height`
+    + `&forecast_days=3&wind_speed_unit=kmh&timezone=${TZ}${modelParam}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Forecast HTTP ${res.status} for ${pt.name} / ${model.label}`);
+  const data = await res.json();
+  const now = Date.now();
+  const future = data.hourly.time
+    .map((t, i) => ({ t: new Date(t).getTime(), i }))
+    .filter(({ t }) => t > now);
+  const pick = arr => future.map(({ i }) => arr[i] ?? null);
+  return {
+    ...pt,
+    name:      `${pt.name} — ${model.label}`,
+    dash:      model.dash,
+    elevation: Math.round(data.elevation),
+    fcTimes:        future.map(({ i }) => data.hourly.time[i]),
+    fcTemps:        pick(data.hourly.temperature_2m),
+    fcWinds:        pick(data.hourly.windspeed_10m),
+    fcPrecip:       pick(data.hourly.precipitation).map(v => v != null ? Math.max(0, v) : null),
+    fcFreezeLevel:  pick(data.hourly.freezinglevel_height),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function trimTo48h(times, values) {
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const now    = new Date();
+  const out = { times: [], values: [] };
+  for (let i = 0; i < times.length; i++) {
+    const t = new Date(times[i]);
+    if (t >= cutoff && t <= now) {
+      out.times.push(times[i]);
+      out.values.push(values[i]);
+    }
+  }
+  return out;
+}
+
+function rangeStats(times, values) {
+  const { values: v } = trimTo48h(times, values);
+  const valid = v.filter(x => x !== null);
+  const current = [...valid].at(-1);
+  return {
+    current,
+    min: valid.length ? Math.min(...valid) : undefined,
+    max: valid.length ? Math.max(...valid) : undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Shared chart builders
+// ---------------------------------------------------------------------------
+
+// Multi-line time series
+function renderSeriesChart(elId, stations, getValues, yLabel, forecasts = [], getFcVals = fp => fp.fcTemps) {
+  const histTraces = stations.map(s => {
+    const { times, values } = trimTo48h(s.times, getValues(s));
+    return {
+      x: times, y: values,
+      name: `${s.name} (${s.elevation}m)`,
+      type: 'scatter', mode: 'lines',
+      line: { color: s.color, width: 2 },
+      hovertemplate: `%{y:.1f} ${yLabel}<extra>${s.name}</extra>`,
+    };
+  });
+
+  const fcTraces = forecasts.map(fp => ({
+    x: fp.fcTimes, y: getFcVals(fp),
+    name: `${fp.name} (${fp.elevation}m)`,
+    type: 'scatter', mode: 'lines',
+    line: { color: fp.color, width: 2, dash: fp.dash ?? 'dash' },
+    hovertemplate: `%{y:.1f} ${yLabel}<extra>${fp.name}</extra>`,
+  }));
+
+  const nowStr = new Date().toISOString();
+  Plotly.newPlot(elId, [...histTraces, ...fcTraces], {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 10, b: 50, l: 50 },
+    showlegend: false,
+    hovermode: 'x unified',
+    shapes: [{ type: 'line', xref: 'x', yref: 'paper', x0: nowStr, x1: nowStr, y0: 0, y1: 1, line: { color: '#334155', width: 1 } }],
+    annotations: [{ xref: 'x', yref: 'paper', x: nowStr, y: 1, text: 'Now', showarrow: false, font: { size: 9, color: '#475569' }, xanchor: 'left', yanchor: 'top' }],
+    xaxis: { ...AXIS_STYLE, type: 'date', tickformat: '%a %b %d\n%H:%M' },
+    yaxis: { ...AXIS_STYLE, title: yLabel, zeroline: true, zerolinecolor: '#3d4f6e', zerolinewidth: 1 },
+  }, PLOT_DEFAULTS);
+}
+
+// Scatter profile: value vs elevation with min/max bars
+function renderProfileChart(elId, stations, getValues, xLabel) {
+  const sorted = stations
+    .map(s => ({ ...rangeStats(s.times, getValues(s)), elev: s.elevation, name: s.name, color: s.color }))
+    .filter(s => s.current !== undefined)
+    .sort((a, b) => a.elev - b.elev);
+
+  const rangeBars = sorted.map(s => ({
+    x: [s.min, s.max], y: [s.elev, s.elev],
+    type: 'scatter', mode: 'lines',
+    line: { color: s.color, width: 3 },
+    opacity: 0.35, showlegend: false,
+    hovertemplate: `<b>${s.name}</b><br>${s.elev}m<br>Min: ${s.min?.toFixed(1)} &nbsp; Max: ${s.max?.toFixed(1)}<extra></extra>`,
+  }));
+
+  const points = {
+    x: sorted.map(s => s.current),
+    y: sorted.map(s => s.elev),
+    text: sorted.map(s => s.name),
+    type: 'scatter', mode: 'markers',
+    marker: { color: sorted.map(s => s.color), size: 14, line: { color: '#0f1117', width: 2 } },
+    hovertemplate: '<b>%{text}</b><br>%{y}m &mdash; %{x:.1f} (now)<extra></extra>',
+    showlegend: false,
+  };
+
+  Plotly.newPlot(elId, [...rangeBars, points], {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 20, b: 50, l: 60 },
+    showlegend: false,
+    xaxis: { ...AXIS_STYLE, title: xLabel, zeroline: true, zerolinecolor: '#3d4f6e', zerolinewidth: 1 },
+    yaxis: { ...AXIS_STYLE, title: 'Elevation (m)' },
+  }, PLOT_DEFAULTS);
+}
+
+// ---------------------------------------------------------------------------
+// Temperature-specific charts
+// ---------------------------------------------------------------------------
+function renderTempProfile(stations, forecasts = []) {
+  const sorted = stations
+    .map(s => ({ ...rangeStats(s.times, s.temps), elev: s.elevation, name: s.name, color: s.color }))
+    .filter(s => s.current !== undefined)
+    .sort((a, b) => a.elev - b.elev);
+
+  const rangeBars = sorted.map(s => ({
+    x: [s.min, s.max], y: [s.elev, s.elev],
+    type: 'scatter', mode: 'lines',
+    line: { color: s.color, width: 3 },
+    opacity: 0.35, showlegend: false,
+    hovertemplate: `<b>${s.name}</b><br>${s.elev}m<br>Min: ${s.min?.toFixed(1)}°C &nbsp; Max: ${s.max?.toFixed(1)}°C<extra></extra>`,
+  }));
+
+  const points = {
+    x: sorted.map(s => s.current),
+    y: sorted.map(s => s.elev),
+    text: sorted.map(s => s.name),
+    type: 'scatter', mode: 'markers',
+    marker: { color: sorted.map(s => s.color), size: 14, line: { color: '#0f1117', width: 2 } },
+    hovertemplate: '<b>%{text}</b><br>%{y}m &mdash; %{x:.1f}°C (now)<extra></extra>',
+    showlegend: false,
+  };
+
+  // Linear regression on current temps
+  const n = sorted.length;
+  const traces = [...rangeBars, points];
+  if (n >= 2) {
+    const sumX  = sorted.reduce((a, s) => a + s.current, 0);
+    const sumY  = sorted.reduce((a, s) => a + s.elev, 0);
+    const sumXY = sorted.reduce((a, s) => a + s.current * s.elev, 0);
+    const sumX2 = sorted.reduce((a, s) => a + s.current * s.current, 0);
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    const lapseRate = (-100 / slope).toFixed(2);
+    const lapseTile = document.getElementById('tile-lapse-rate');
+    if (lapseTile) lapseTile.textContent = `${lapseRate}°C`;
+    const minT = Math.min(...sorted.map(s => s.min ?? s.current)) - 1;
+    const maxT = Math.max(...sorted.map(s => s.max ?? s.current)) + 1;
+    traces.push({
+      x: [minT, maxT],
+      y: [slope * minT + intercept, slope * maxT + intercept],
+      mode: 'lines',
+      line: { color: '#475569', width: 1.5, dash: 'dot' },
+      hoverinfo: 'skip', showlegend: true,
+      name: `Lapse rate: ${lapseRate}°C / 100m`,
+    });
+  }
+
+  // Forecast min/max range bars at each forecast point's elevation
+  forecasts.forEach(fp => {
+    const valid = fp.fcTemps.filter(t => t !== null);
+    if (!valid.length) return;
+    const fcMin = Math.min(...valid), fcMax = Math.max(...valid);
+    traces.push({
+      x: [fcMin, fcMax], y: [fp.elevation, fp.elevation],
+      type: 'scatter', mode: 'lines',
+      line: { color: fp.color, width: 3, dash: 'dash' },
+      opacity: 0.5, showlegend: false,
+      hovertemplate: `<b>${fp.name}</b> (${fp.elevation}m)<br>Forecast: ${fcMin.toFixed(1)}°C – ${fcMax.toFixed(1)}°C<extra></extra>`,
+    });
+  });
+
+  Plotly.newPlot('chart-temp-profile', traces, {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 20, b: 50, l: 60 },
+    legend: { bgcolor: 'transparent', x: 0, y: 1, font: { size: 11 } },
+    xaxis: { ...AXIS_STYLE, title: 'Temperature (°C)', zeroline: true, zerolinecolor: '#3d4f6e', zerolinewidth: 1 },
+    yaxis: { ...AXIS_STYLE, title: 'Elevation (m)', rangemode: 'nonnegative' },
+  }, PLOT_DEFAULTS);
+}
+
+function renderFreezeChart(stations, forecasts = []) {
+  const ref = trimTo48h(stations[0].times, stations[0].temps);
+
+  const freezeLevels = ref.times.map((t) => {
+    const refMs = new Date(t).getTime();
+    const pts = stations
+      .map(s => {
+        let bestIdx = -1, bestDiff = Infinity;
+        for (let i = 0; i < s.times.length; i++) {
+          const diff = Math.abs(new Date(s.times[i]).getTime() - refMs);
+          if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+        }
+        const temp = bestIdx >= 0 && bestDiff < 1800000 ? s.temps[bestIdx] : null;
+        return { elev: s.elevation, temp };
+      })
+      .filter(p => p.temp !== null)
+      .sort((a, b) => a.elev - b.elev);
+    return freezingLevel(pts);
+  });
+
+  const currentFreeze = [...freezeLevels].reverse().find(v => v !== null);
+  const freezeTile = document.getElementById('tile-freeze-level');
+  if (freezeTile && currentFreeze != null) freezeTile.textContent = `${Math.round(currentFreeze).toLocaleString()}m`;
+
+  const refLines = [
+    { elev: 511,  label: 'Revelstoke (~511m)' },
+    { elev: 1315, label: 'Rogers Pass (~1315m)' },
+    { elev: 2340, label: 'RMR Subpeak (~2340m)' },
+  ];
+
+  const fcTraces = forecasts
+    .filter(fp => fp.fcFreezeLevel && fp.fcFreezeLevel.some(v => v != null))
+    .map(fp => ({
+      x: fp.fcTimes, y: fp.fcFreezeLevel,
+      type: 'scatter', mode: 'lines',
+      name: fp.name,
+      line: { color: fp.color, width: 1.5, dash: fp.dash === 'solid' ? 'dash' : fp.dash },
+      hovertemplate: '%{y:.0f}m<extra>' + fp.name + '</extra>',
+    }));
+
+  Plotly.newPlot('chart-freeze', [
+    {
+      x: ref.times, y: freezeLevels,
+      type: 'scatter', mode: 'lines', name: 'Observed',
+      fill: 'tozeroy', fillcolor: 'rgba(56,189,248,0.08)',
+      line: { color: '#38bdf8', width: 2 },
+      hovertemplate: '%{y:.0f}m<extra>Observed</extra>',
+    },
+    ...fcTraces,
+  ], {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 130, b: fcTraces.length > 0 ? 80 : 50, l: 60 },
+    showlegend: fcTraces.length > 0,
+    legend: { orientation: 'h', y: -0.22, font: { size: 10, color: '#94a3b8' } },
+    hovermode: 'x unified',
+    shapes: refLines.map(r => ({
+      type: 'line', xref: 'paper', yref: 'y',
+      x0: 0, x1: 1, y0: r.elev, y1: r.elev,
+      line: { color: '#2d3748', width: 1, dash: 'dot' },
+    })),
+    annotations: refLines.map(r => ({
+      xref: 'paper', yref: 'y',
+      x: 1, y: r.elev, xanchor: 'right', yanchor: 'bottom',
+      text: r.label, showarrow: false,
+      font: { size: 10, color: '#475569' },
+    })),
+    xaxis: { ...AXIS_STYLE, type: 'date', tickformat: '%a %b %d\n%H:%M' },
+    yaxis: { ...AXIS_STYLE, title: 'Elevation (m)' },
+  }, PLOT_DEFAULTS);
+}
+
+function freezingLevel(pts) {
+  if (pts.length < 2) return null;
+  const allAbove = pts.every(p => p.temp > 0);
+  const allBelow = pts.every(p => p.temp < 0);
+  if (allAbove) {
+    const a = pts[pts.length - 2], b = pts[pts.length - 1];
+    return b.elev + (b.elev - a.elev) / (b.temp - a.temp) * (0 - b.temp);
+  }
+  if (allBelow) {
+    const a = pts[0], b = pts[1];
+    return a.elev + (b.elev - a.elev) / (b.temp - a.temp) * (0 - a.temp);
+  }
+  for (let i = 0; i < pts.length - 1; i++) {
+    const lo = pts[i], hi = pts[i + 1];
+    if ((lo.temp >= 0 && hi.temp <= 0) || (lo.temp <= 0 && hi.temp >= 0)) {
+      return lo.elev + (0 - lo.temp) * (hi.elev - lo.elev) / (hi.temp - lo.temp);
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Wind speed + gusts combined series chart
+// ---------------------------------------------------------------------------
+function renderWindSeries(elId, stations, forecasts = []) {
+  const traces = stations.flatMap(s => {
+    const { times, values: speeds } = trimTo48h(s.times, s.winds);
+    const { values: gusts }         = trimTo48h(s.times, s.gusts);
+    return [
+      {
+        x: times, y: speeds,
+        name: `${s.name} (${s.elevation}m)`,
+        type: 'scatter', mode: 'lines',
+        line: { color: s.color, width: 2 },
+        hovertemplate: `%{y:.0f} km/h<extra>${s.name} speed</extra>`,
+        legendgroup: s.name, showlegend: false,
+      },
+      {
+        x: times, y: gusts,
+        name: `${s.name} gusts`,
+        type: 'scatter', mode: 'lines',
+        line: { color: s.color, width: 1, dash: 'dot' },
+        opacity: 0.45,
+        hovertemplate: `%{y:.0f} km/h<extra>${s.name} gust</extra>`,
+        legendgroup: s.name, showlegend: false,
+      },
+    ];
+  });
+
+  const fcTraces = forecasts.map(fp => ({
+    x: fp.fcTimes, y: fp.fcWinds,
+    name: `${fp.name} (${fp.elevation}m)`,
+    type: 'scatter', mode: 'lines',
+    line: { color: fp.color, width: 2, dash: fp.dash ?? 'dash' },
+    hovertemplate: `%{y:.0f} km/h<extra>${fp.name}</extra>`,
+  }));
+
+  const nowStr = new Date().toISOString();
+  Plotly.newPlot(elId, [...traces, ...fcTraces], {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 10, b: 50, l: 50 },
+    showlegend: false,
+    hovermode: 'x unified',
+    shapes: [{ type: 'line', xref: 'x', yref: 'paper', x0: nowStr, x1: nowStr, y0: 0, y1: 1, line: { color: '#334155', width: 1 } }],
+    annotations: [{ xref: 'x', yref: 'paper', x: nowStr, y: 1, text: 'Now', showarrow: false, font: { size: 9, color: '#475569' }, xanchor: 'left', yanchor: 'top' }],
+    xaxis: { ...AXIS_STYLE, type: 'date', tickformat: '%a %b %d\n%H:%M' },
+    yaxis: { ...AXIS_STYLE, title: 'km/h', rangemode: 'tozero' },
+  }, PLOT_DEFAULTS);
+}
+
+// ---------------------------------------------------------------------------
+// Wind roses
+// ---------------------------------------------------------------------------
+const SPEED_BINS = [
+  { label: '< 10 km/h',  min: 0,  max: 10,       color: '#bfdbfe' },
+  { label: '10–20 km/h', min: 10, max: 20,       color: '#60a5fa' },
+  { label: '20–40 km/h', min: 20, max: 40,       color: '#2563eb' },
+  { label: '> 40 km/h',  min: 40, max: Infinity, color: '#1e3a8a' },
+];
+
+const GUST_BINS = [
+  { label: 'Gusts 20–40 km/h', min: 20, max: 40,       color: '#fed7aa' },
+  { label: 'Gusts > 40 km/h',  min: 40, max: Infinity, color: '#ea580c' },
+];
+
+const SECTORS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+const SECTOR_SIZE = 360 / SECTORS.length;
+
+function dirSector(deg) {
+  return Math.floor(((deg + SECTOR_SIZE / 2) % 360) / SECTOR_SIZE);
+}
+
+function buildRoseTraces(speeds, gusts, dirs) {
+  const total = speeds.filter(s => s !== null).length || 1;
+
+  // Count per speed bin per sector
+  const speedCounts = SPEED_BINS.map(() => new Array(SECTORS.length).fill(0));
+  const gustCounts  = GUST_BINS.map(()  => new Array(SECTORS.length).fill(0));
+
+  for (let i = 0; i < speeds.length; i++) {
+    const spd = speeds[i], gst = gusts[i], dir = dirs[i];
+    if (spd === null || dir === null) continue;
+    const sec = dirSector(dir);
+
+    const sbi = SPEED_BINS.findIndex(b => spd >= b.min && spd < b.max);
+    if (sbi >= 0) speedCounts[sbi][sec]++;
+
+    if (gst !== null) {
+      const gbi = GUST_BINS.findIndex(b => gst >= b.min && gst < b.max);
+      if (gbi >= 0) gustCounts[gbi][sec]++;
+    }
+  }
+
+  const pct = counts => counts.map(c => +(c / total * 100).toFixed(2));
+
+  const speedTraces = SPEED_BINS.map((bin, i) => ({
+    type: 'barpolar',
+    r: pct(speedCounts[i]),
+    theta: SECTORS,
+    name: bin.label,
+    marker: { color: bin.color },
+    hovertemplate: `%{r:.1f}% from %{theta}<extra>${bin.label}</extra>`,
+  }));
+
+  const gustTraces = GUST_BINS.map((bin, i) => ({
+    type: 'barpolar',
+    r: pct(gustCounts[i]),
+    theta: SECTORS,
+    name: bin.label,
+    marker: { color: bin.color, opacity: 0.7 },
+    hovertemplate: `%{r:.1f}% from %{theta}<extra>${bin.label}</extra>`,
+  }));
+
+  return [...speedTraces, ...gustTraces];
+}
+
+function renderWindRoses(stations) {
+  const container = document.getElementById('wind-roses');
+  container.innerHTML = '';
+
+  stations.forEach(s => {
+    const id = `rose-${s.elevation}`;
+    const wrap = document.createElement('div');
+    wrap.className = 'chart-container';
+    wrap.style.marginBottom = '0';
+    wrap.innerHTML = `<h2>${s.name} <span style="font-weight:400;text-transform:none;letter-spacing:0;">(${s.elevation}m)</span></h2><div id="${id}" style="height:320px;"></div>`;
+    container.appendChild(wrap);
+
+    const { values: speeds } = trimTo48h(s.times, s.winds);
+    const { values: gusts }  = trimTo48h(s.times, s.gusts);
+    const { values: dirs }   = trimTo48h(s.times, s.winddir);
+
+    const traces = buildRoseTraces(speeds, gusts, dirs);
+
+    Plotly.newPlot(id, traces, {
+      ...BASE_LAYOUT,
+      margin: { t: 8, r: 8, b: 8, l: 8 },
+      barmode: 'stack',
+      polar: {
+        bgcolor: '#161b27',
+        angularaxis: {
+          direction: 'clockwise',
+          rotation: 90,
+          gridcolor: '#2d3748',
+          linecolor: '#2d3748',
+          tickcolor: '#475569',
+          tickfont: { size: 11, color: '#64748b' },
+        },
+        radialaxis: {
+          gridcolor: '#2d3748',
+          linecolor: '#2d3748',
+          ticksuffix: '%',
+          tickfont: { size: 9, color: '#475569' },
+          angle: 45,
+        },
+      },
+      legend: {
+        font: { size: 10, color: '#94a3b8' },
+        bgcolor: 'transparent',
+        orientation: 'h',
+        x: 0, y: -0.05,
+      },
+    }, PLOT_DEFAULTS);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Precipitation charts
+// ---------------------------------------------------------------------------
+
+// Temperature-based phase split:
+// <= 0°C → all snow, >= 2°C → all rain, 0–2°C → linear mix
+// Both values returned in mm water equivalent
+function splitPhase(precipMM, tempC) {
+  if (!precipMM) return { rainMM: 0, snowMM: 0 };
+  const rainFrac = tempC <= 0 ? 0 : tempC >= 2 ? 1 : tempC / 2;
+  return { rainMM: precipMM * rainFrac, snowMM: precipMM * (1 - rainFrac) };
+}
+
+function renderPrecipSeries(stations, forecasts = []) {
+  const active = stations.filter(s => {
+    const { values } = trimTo48h(s.times, s.precip);
+    return values.some(v => v != null && v > 0);
+  });
+
+  const traces = active.map(s => {
+    const { times, values: precips } = trimTo48h(s.times, s.precip);
+
+    let cumulative = 0;
+    const cumVals = precips.map(p => {
+      cumulative += p ?? 0;
+      return +cumulative.toFixed(2);
+    });
+
+    return {
+      x: times, y: cumVals,
+      name: `${s.name} (${s.elevation}m)`,
+      type: 'scatter', mode: 'lines',
+      line: { color: s.color, width: 2 },
+      hovertemplate: `%{y:.1f}mm<extra>${s.name}</extra>`,
+    };
+  });
+
+  const fcTraces = forecasts.map(fp => {
+    let cum = 0;
+    const cumVals = fp.fcPrecip.map(p => { cum += p ?? 0; return +cum.toFixed(2); });
+    return {
+      x: fp.fcTimes, y: cumVals,
+      name: `${fp.name} (${fp.elevation}m)`,
+      type: 'scatter', mode: 'lines',
+      line: { color: fp.color, width: 2, dash: fp.dash ?? 'dash' },
+      hovertemplate: `%{y:.1f}mm<extra>${fp.name}</extra>`,
+    };
+  });
+
+  const nowStr = new Date().toISOString();
+  Plotly.newPlot('chart-precip-series', [...traces, ...fcTraces], {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 10, b: 100, l: 50 },
+    showlegend: true,
+    legend: { orientation: 'h', x: 0, y: -0.25, font: { size: 11, color: '#94a3b8' }, bgcolor: 'transparent' },
+    hovermode: 'x unified',
+    shapes: [{ type: 'line', xref: 'x', yref: 'paper', x0: nowStr, x1: nowStr, y0: 0, y1: 1, line: { color: '#334155', width: 1 } }],
+    annotations: [{ xref: 'x', yref: 'paper', x: nowStr, y: 1, text: 'Now', showarrow: false, font: { size: 9, color: '#475569' }, xanchor: 'left', yanchor: 'top' }],
+    xaxis: { ...AXIS_STYLE, type: 'date', tickformat: '%a %b %d\n%H:%M' },
+    yaxis: { ...AXIS_STYLE, title: 'Cumulative precipitation (mm w.e.)', rangemode: 'tozero' },
+  }, PLOT_DEFAULTS);
+}
+
+function renderPrecipProfile(stations) {
+  const sorted = stations.filter(s => {
+    const { values } = trimTo48h(s.times, s.precip);
+    return values.some(v => v != null && v > 0);
+  }).map(s => {
+    const { values: precips } = trimTo48h(s.times, s.precip);
+    const { values: temps }   = trimTo48h(s.times, s.temps);
+    let totalRain = 0, totalSnow = 0;
+    precips.forEach((p, i) => {
+      const { rainMM, snowMM } = splitPhase(p, temps[i]);
+      totalRain += rainMM;
+      totalSnow += snowMM;
+    });
+    return { ...s, totalRain, totalSnow };
+  }).sort((a, b) => a.elevation - b.elevation);
+
+  const elevLabels = sorted.map(s => `${s.elevation}m`);
+  const names      = sorted.map(s => s.name);
+
+  Plotly.newPlot('chart-precip-profile', [
+    {
+      y: elevLabels, x: sorted.map(s => s.totalRain),
+      customdata: names,
+      name: 'Rain (mm)', type: 'bar', orientation: 'h',
+      marker: { color: sorted.map(s => s.color), opacity: 0.85 },
+      hovertemplate: '<b>%{customdata}</b> (%{y})<br>%{x:.1f}mm rain<extra></extra>',
+    },
+    {
+      y: elevLabels, x: sorted.map(s => s.totalSnow),
+      customdata: names,
+      name: 'Snow w.e. (mm)', type: 'bar', orientation: 'h',
+      marker: { color: '#e2e8f0', opacity: 0.55 },
+      hovertemplate: '<b>%{customdata}</b> (%{y})<br>%{x:.1f}mm snow w.e.<extra></extra>',
+    },
+  ], {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 20, b: 80, l: 60 },
+    barmode: 'stack',
+    legend: { orientation: 'h', x: 0, y: -0.2, bgcolor: 'transparent', font: { size: 11, color: '#94a3b8' } },
+    xaxis: { ...AXIS_STYLE, title: '48hr accumulated (mm water equivalent)', rangemode: 'tozero' },
+    yaxis: { ...AXIS_STYLE },
+  }, PLOT_DEFAULTS);
+}
+
+function renderSnowLevel(stations) {
+  // Estimate snow level: elevation where snowfall > 0 and rain > 0 transition
+  // Fall back to temp-based estimate (~2°C isotherm) when precip is zero
+  const ref = trimTo48h(stations[0].times, stations[0].precip);
+
+  const snowLevels = ref.times.map((t) => {
+    const idx = stations[0].times.indexOf(t);
+    const pts = stations
+      .map(s => ({
+        elev: s.elevation,
+        rain: s.rain[idx],
+        snow: s.snowfall[idx],
+        temp: s.temps[idx],
+      }))
+      .filter(p => p.temp !== null)
+      .sort((a, b) => a.elev - b.elev);
+
+    // Prefer actual rain/snow data when precip is occurring
+    const precipPts = pts.filter(p => (p.rain ?? 0) > 0 || (p.snow ?? 0) > 0);
+    if (precipPts.length >= 2) {
+      // Find transition: raining below, snowing above
+      for (let i = 0; i < precipPts.length - 1; i++) {
+        const lo = precipPts[i], hi = precipPts[i + 1];
+        if ((lo.rain ?? 0) > 0 && (hi.snow ?? 0) > 0) {
+          // Interpolate by temperature through the 2°C snow line
+          const dT = hi.temp - lo.temp;
+          if (Math.abs(dT) > 0.01) {
+            return lo.elev + (2 - lo.temp) * (hi.elev - lo.elev) / dT;
+          }
+          return (lo.elev + hi.elev) / 2;
+        }
+      }
+    }
+
+    // No precip or single-phase: use 2°C isotherm as proxy
+    return freezingLevel(pts.map(p => ({ elev: p.elev, temp: p.temp - 2 })));
+  });
+
+  const refLines = [
+    { elev: 511,  label: 'Revelstoke (~511m)' },
+    { elev: 1330, label: 'Rogers Pass (~1330m)' },
+    { elev: 2340, label: 'RMR Subpeak (~2340m)' },
+  ];
+
+  Plotly.newPlot('chart-snow-level', [{
+    x: ref.times, y: snowLevels,
+    type: 'scatter', mode: 'lines',
+    fill: 'tozeroy', fillcolor: 'rgba(226,232,240,0.07)',
+    line: { color: '#e2e8f0', width: 2 },
+    hovertemplate: '%{y:.0f}m<extra>Snow Level</extra>',
+  }], {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 130, b: 50, l: 60 },
+    showlegend: false,
+    hovermode: 'x unified',
+    shapes: refLines.map(r => ({
+      type: 'line', xref: 'paper', yref: 'y',
+      x0: 0, x1: 1, y0: r.elev, y1: r.elev,
+      line: { color: '#2d3748', width: 1, dash: 'dot' },
+    })),
+    annotations: refLines.map(r => ({
+      xref: 'paper', yref: 'y',
+      x: 1, y: r.elev, xanchor: 'right', yanchor: 'bottom',
+      text: r.label, showarrow: false,
+      font: { size: 10, color: '#475569' },
+    })),
+    xaxis: { ...AXIS_STYLE, type: 'date', tickformat: '%a %b %d\n%H:%M' },
+    yaxis: { ...AXIS_STYLE, title: 'Elevation (m)' },
+  }, PLOT_DEFAULTS);
+}
+
+// ---------------------------------------------------------------------------
+// Map
+// ---------------------------------------------------------------------------
+let leafletMap = null;
+let markerLayer = null;
+
+function renderMap(stations) {
+  if (!leafletMap) {
+    leafletMap = L.map('station-map', { zoomControl: true }).setView([51.1, -118.0], 8);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 19,
+    }).addTo(leafletMap);
+    markerLayer = L.layerGroup().addTo(leafletMap);
+  }
+
+  markerLayer.clearLayers();
+
+  stations.forEach(s => {
+    const { current } = rangeStats(s.times, s.temps);
+    const tempStr  = current != null ? `${current.toFixed(1)}°C` : 'no data';
+    const windStat = rangeStats(s.times, s.winds);
+    const windStr  = windStat.current != null ? `${windStat.current.toFixed(0)} km/h` : '—';
+
+    L.circleMarker([s.lat, s.lon], {
+      radius: 9,
+      fillColor: s.color,
+      color: '#0f1117',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.9,
+    })
+    .bindPopup(`
+      <div style="font-family:monospace;line-height:1.6;">
+        <b style="color:${s.color}">${s.name}</b><br>
+        ${s.elevation}m elevation<br>
+        Temp: <b>${tempStr}</b><br>
+        Wind: ${windStr}
+      </div>
+    `)
+    .addTo(markerLayer);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Extrapolate temps beyond the measured range using observed lapse rate
+// refLow / refHigh: station objects with .times and .temps
+// times: the target station's time array
+// targetElev: elevation to extrapolate to (metres)
+// ---------------------------------------------------------------------------
+function extrapolateTemps(times, refLow, refHigh, targetElev) {
+  return times.map(t => {
+    const tMs = new Date(t).getTime();
+    const find = (st) => {
+      let best = -1, bestDiff = Infinity;
+      for (let j = 0; j < st.times.length; j++) {
+        const d = Math.abs(new Date(st.times[j]).getTime() - tMs);
+        if (d < bestDiff) { bestDiff = d; best = j; }
+      }
+      return best >= 0 && bestDiff < 3600000 ? st.temps[best] : null;
+    };
+    const tLo = find(refLow), tHi = find(refHigh);
+    if (tLo === null || tHi === null) return null;
+    const lr = (tHi - tLo) / (refHigh.elevation - refLow.elevation);
+    return +(tHi + lr * (targetElev - refHigh.elevation)).toFixed(1);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Tab switching
+// ---------------------------------------------------------------------------
+let windRendered = false;
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+
+    // Plotly needs a resize trigger when panels become visible
+    window.dispatchEvent(new Event('resize'));
+    // Leaflet needs its own invalidation
+    if (btn.dataset.tab === 'map' && leafletMap) {
+      setTimeout(() => leafletMap.invalidateSize(), 50);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Station filter (persistent via localStorage)
+// ---------------------------------------------------------------------------
+const FILTER_KEY = 'revyweather-stations';
+let allStations = [];
+
+function getSelectedIds() {
+  try {
+    const saved = localStorage.getItem(FILTER_KEY);
+    if (saved) return new Set(JSON.parse(saved));
+  } catch {}
+  return new Set(STATIONS.map(s => s.stationId));
+}
+
+function saveSelectedIds(ids) {
+  localStorage.setItem(FILTER_KEY, JSON.stringify([...ids]));
+}
+
+function getFilteredStations() {
+  const ids = getSelectedIds();
+  return allStations.filter(s => ids.has(s.stationId));
+}
+
+function updateFilterBtn() {
+  const ids = getSelectedIds();
+  const n = allStations.filter(s => ids.has(s.stationId)).length;
+  document.getElementById('filter-btn').textContent = `Stations (${n} / ${allStations.length})`;
+}
+
+function buildFilterUI() {
+  const list = document.getElementById('filter-list');
+  const ids  = getSelectedIds();
+  list.innerHTML = '';
+
+  allStations.forEach(s => {
+    const item = document.createElement('label');
+    item.className = 'filter-item';
+    item.innerHTML = `
+      <input type="checkbox" value="${s.stationId}" ${ids.has(s.stationId) ? 'checked' : ''}>
+      <span class="filter-dot" style="background:${s.color}"></span>
+      <span class="filter-name">${s.name}</span>
+      <span class="filter-elev">${s.elevation}m</span>
+    `;
+    item.querySelector('input').addEventListener('change', e => {
+      const cur = getSelectedIds();
+      if (e.target.checked) cur.add(s.stationId);
+      else cur.delete(s.stationId);
+      saveSelectedIds(cur);
+      updateFilterBtn();
+      renderAll();
+    });
+    list.appendChild(item);
+  });
+
+  document.getElementById('filter-all').addEventListener('click', () => {
+    saveSelectedIds(new Set(allStations.map(s => s.stationId)));
+    buildFilterUI();
+    updateFilterBtn();
+    renderAll();
+  });
+
+  document.getElementById('filter-none').addEventListener('click', () => {
+    saveSelectedIds(new Set());
+    buildFilterUI();
+    updateFilterBtn();
+    renderAll();
+  });
+}
+
+// Toggle station panel
+document.getElementById('filter-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('filter-panel').classList.toggle('hidden');
+  document.getElementById('fc-filter-panel').classList.add('hidden');
+});
+
+// ---------------------------------------------------------------------------
+// Forecast multi-select (persistent via localStorage)
+// ---------------------------------------------------------------------------
+const FC_FILTER_KEY = 'revyweather-forecasts';
+
+function getFcSelectedNames() {
+  try {
+    const saved = localStorage.getItem(FC_FILTER_KEY);
+    if (saved) return new Set(JSON.parse(saved));
+  } catch {}
+  return new Set(FORECAST_POINTS.flatMap(pt => FORECAST_MODELS.map(m => `${pt.name} — ${m.label}`)));
+}
+
+function getFilteredForecasts() {
+  const names = getFcSelectedNames();
+  return forecastData.filter(fp => names.has(fp.name));
+}
+
+function saveFcSelectedNames(names) {
+  localStorage.setItem(FC_FILTER_KEY, JSON.stringify([...names]));
+}
+
+function buildFcFilterUI() {
+  const list  = document.getElementById('fc-filter-list');
+  const saved = getFcSelectedNames();
+  list.innerHTML = '';
+  forecastData.forEach(fp => {
+    const item = document.createElement('label');
+    item.className = 'filter-item';
+    item.innerHTML = `
+      <input type="checkbox" value="${fp.name}" ${saved.has(fp.name) ? 'checked' : ''}>
+      <span class="filter-dot" style="background:${fp.color}"></span>
+      <span class="filter-name">${fp.name}</span>
+      <span class="filter-elev">${fp.elevation}m</span>
+    `;
+    item.querySelector('input').addEventListener('change', e => {
+      const cur = getFcSelectedNames();
+      if (e.target.checked) cur.add(fp.name);
+      else cur.delete(fp.name);
+      saveFcSelectedNames(cur);
+      updateFcFilterBtn();
+      renderAll();
+    });
+    list.appendChild(item);
+  });
+
+  document.getElementById('fc-filter-all').addEventListener('click', () => {
+    saveFcSelectedNames(new Set(forecastData.map(fp => fp.name)));
+    buildFcFilterUI();
+    updateFcFilterBtn();
+    renderAll();
+  });
+
+  document.getElementById('fc-filter-none').addEventListener('click', () => {
+    saveFcSelectedNames(new Set());
+    buildFcFilterUI();
+    updateFcFilterBtn();
+    renderAll();
+  });
+}
+
+function updateFcFilterBtn() {
+  const names = getFcSelectedNames();
+  const n = forecastData.filter(fp => names.has(fp.name)).length;
+  document.getElementById('fc-filter-btn').textContent = `Forecast (${n} / ${forecastData.length})`;
+}
+
+// Toggle forecast panel
+document.getElementById('fc-filter-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('fc-filter-panel').classList.toggle('hidden');
+  document.getElementById('filter-panel').classList.add('hidden');
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.filter-wrap')) {
+    document.getElementById('filter-panel').classList.add('hidden');
+    document.getElementById('fc-filter-panel').classList.add('hidden');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Render all charts from current filter selection
+// ---------------------------------------------------------------------------
+function renderAll() {
+  const stations  = getFilteredStations();
+  const forecasts = getFilteredForecasts();
+  if (!stations.length) return;
+
+  renderSeriesChart('chart-temp-series', stations, s => s.temps, '°C', forecasts, fp => fp.fcTemps);
+  renderTempProfile(stations, forecasts);
+  renderFreezeChart(stations, forecasts);
+
+  renderWindSeries('chart-wind-series', stations, forecasts);
+  renderProfileChart('chart-wind-profile', stations, s => s.winds, 'Wind Speed (km/h)');
+  renderWindRoses(stations);
+
+  renderPrecipSeries(stations, forecasts);
+  renderPrecipProfile(stations);
+
+  renderMap(stations);
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+async function main() {
+  const statusEl  = document.getElementById('status');
+  const updatedEl = document.getElementById('updated');
+
+  try {
+    statusEl.textContent = 'Fetching station data...';
+    const fcCombos = FORECAST_POINTS.flatMap(pt => FORECAST_MODELS.map(model => ({ pt, model })));
+    [allStations, forecastData] = await Promise.all([
+      Promise.all(STATIONS.map(fetchStation)),
+      Promise.allSettled(fcCombos.map(({ pt, model }) => fetchForecastPoint(pt, model)))
+        .then(results => results.filter(r => r.status === 'fulfilled').map(r => r.value)),
+    ]);
+
+    buildFilterUI();
+    updateFilterBtn();
+    buildFcFilterUI();
+    updateFcFilterBtn();
+    renderAll();
+
+    const now = new Date().toLocaleString('en-CA', {
+      timeZone: 'America/Vancouver',
+      month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    updatedEl.textContent = `Updated ${now} PT`;
+    statusEl.textContent = '';
+
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = `Error: ${err.message}`;
+    statusEl.classList.add('error');
+  }
+}
+
+main();
+</script>
+</body>
+</html>

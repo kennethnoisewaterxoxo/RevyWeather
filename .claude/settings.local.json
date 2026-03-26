@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.weather.gc.ca)",
+      "WebFetch(domain:www.env.gov.bc.ca)",
+      "WebFetch(domain:open.canada.ca)",
+      "WebFetch(domain:avalanche.ca)",
+      "WebFetch(domain:prdoas6.pub-apps.th.gov.bc.ca)",
+      "WebSearch",
+      "WebFetch(domain:dd.weather.gc.ca)",
+      "WebFetch(domain:wfapps.nrs.gov.bc.ca)",
+      "WebFetch(domain:www.bchydro.com)",
+      "WebFetch(domain:weather.prod.avalanche.ca)",
+      "WebFetch(domain:api.open-meteo.com)"
+    ]
+  }
+}

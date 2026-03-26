@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>BC Hydro CORS Test</title>
+  <style>
+    body { font-family: monospace; background: #0f1117; color: #e2e8f0; padding: 24px; }
+    h1 { font-size: 1.1rem; margin-bottom: 20px; color: #f8fafc; }
+    .station { margin-bottom: 12px; padding: 12px 16px; border-radius: 8px; background: #1e2330; }
+    .name { font-weight: bold; margin-bottom: 4px; }
+    .url  { font-size: 0.75rem; color: #475569; margin-bottom: 6px; }
+    .result { font-size: 0.85rem; }
+    .ok   { color: #34d399; }
+    .fail { color: #f87171; }
+    .pending { color: #64748b; }
+  </style>
+</head>
+<body>
+<h1>BC Hydro Station CORS Test</h1>
+
+<div id="results"></div>
+
+<script>
+const STATIONS = [
+  { name: 'Rogers Pass Low (GRP)',     code: 'grp', elevation: 1182 },
+  { name: 'Mt Revelstoke (MTR)',       code: 'mtr', elevation: 1770 },
+  { name: 'Colpitti Creek (CPI)',      code: 'cpi', elevation: 2131 },
+  { name: 'Caribou Creek Upper (CCU)', code: 'ccu', elevation: 2201 },
+  { name: 'Conrad Glacier (CRG)',      code: 'crg', elevation: 2257 },
+];
+
+const BASE = 'https://www.bchydro.com/info/res_hydromet/data/';
+
+async function testStation(s) {
+  const div = document.getElementById(`station-${s.code}`);
+  const resultEl = div.querySelector('.result');
+
+  try {
+    const res = await fetch(`${BASE}${s.code}.txt`);
+    if (!res.ok) {
+      resultEl.className = 'result fail';
+      resultEl.textContent = `✗ HTTP ${res.status}`;
+      return;
+    }
+    const text = await res.text();
+    // Parse most recent temp reading
+    const lines = text.trim().split('\n').filter(l => l.trim() && !l.startsWith('#') && !l.toLowerCase().includes('date'));
+    const last = lines.at(-1);
+    const cols = last?.trim().split(/\s+/);
+    // Format: date time precip temp ...
+    const temp = cols?.[3];
+    resultEl.className = 'result ok';
+    resultEl.textContent = `✓ CORS OK — latest temp: ${temp ?? '?'}°C  (${lines.length} rows fetched)`;
+  } catch (err) {
+    resultEl.className = 'result fail';
+    if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
+      resultEl.textContent = `✗ CORS BLOCKED — ${err.message}`;
+    } else {
+      resultEl.textContent = `✗ Error — ${err.message}`;
+    }
+  }
+}
+
+// Build UI
+const container = document.getElementById('results');
+STATIONS.forEach(s => {
+  const div = document.createElement('div');
+  div.className = 'station';
+  div.id = `station-${s.code}`;
+  div.innerHTML = `
+    <div class="name">${s.name} — ${s.elevation}m</div>
+    <div class="url">${BASE}${s.code}.txt</div>
+    <div class="result pending">Testing...</div>
+  `;
+  container.appendChild(div);
+});
+
+// Run tests in parallel
+STATIONS.forEach(testStation);
+
+// --- Avalanche Canada / Parks Canada endpoint tests ---
+const AVCAN_STATIONS = [
+  { name: 'Rogers Pass (station 98)',  id: 98 },
+  { name: 'Mt Fidelity (station 93)', id: 93 },
+];
+AVCAN_STATIONS.forEach(async s => {
+  const div = document.createElement('div');
+  div.className = 'station';
+  div.style.borderLeft = '3px solid #fbbf24';
+  div.innerHTML = `
+    <div class="name" style="color:#fbbf24">AvCan — ${s.name}</div>
+    <div class="url">https://weather.prod.avalanche.ca/stations/${s.id}/measurements</div>
+    <div class="result pending" id="avcan-${s.id}">Testing...</div>
+  `;
+  document.getElementById('results').appendChild(div);
+  try {
+    const res = await fetch(`https://weather.prod.avalanche.ca/stations/${s.id}/measurements`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    const last = rows.sort((a,b) => new Date(b.measurementDateTime) - new Date(a.measurementDateTime))[0];
+    document.getElementById(`avcan-${s.id}`).className = 'result ok';
+    document.getElementById(`avcan-${s.id}`).textContent =
+      `✓ CORS OK — latest: ${last?.airTempAvg}°C  wind: ${last?.windSpeedAvg}km/h ${last?.windDirCompass}  (${rows.length} rows)`;
+  } catch (err) {
+    document.getElementById(`avcan-${s.id}`).className = 'result fail';
+    document.getElementById(`avcan-${s.id}`).textContent = `✗ CORS BLOCKED — ${err.message}`;
+  }
+});
+
+// --- RMR JSON endpoint test ---
+(async () => {
+  const div = document.createElement('div');
+  div.className = 'station';
+  div.style.borderLeft = '3px solid #a78bfa';
+  div.innerHTML = `
+    <div class="name" style="color:#a78bfa">RMR Snow/Weather JSON</div>
+    <div class="url">https://www.revelstokemountainresort.com/snow-weather-json/</div>
+    <div class="result pending" id="rmr-result">Testing...</div>
+  `;
+  document.getElementById('results').appendChild(div);
+
+  try {
+    const res = await fetch('https://www.revelstokemountainresort.com/snow-weather-json/');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    document.getElementById('rmr-result').className = 'result ok';
+    document.getElementById('rmr-result').textContent =
+      `✓ CORS OK — Base: ${data.weather?.temperature}°C  Summit: ${data.summit?.temperature}°C  Subpeak: ${data.subpeak?.temperature}°C`;
+  } catch (err) {
+    document.getElementById('rmr-result').className = 'result fail';
+    document.getElementById('rmr-result').textContent = `✗ CORS BLOCKED — ${err.message}`;
+  }
+})();
+</script>
+</body>
+</html>
