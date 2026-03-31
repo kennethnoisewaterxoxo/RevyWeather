@@ -20,9 +20,29 @@
 
     header {
       display: flex;
-      align-items: baseline;
-      gap: 16px;
+      flex-direction: column;
+      gap: 10px;
       margin-bottom: 20px;
+    }
+
+    .header-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+    }
+
+    .ctrl-sep {
+      width: 1px;
+      height: 22px;
+      background: #2d3748;
+      flex-shrink: 0;
     }
 
     header h1 { font-size: 1.5rem; font-weight: 600; color: #f8fafc; }
@@ -97,9 +117,9 @@
     .tile-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 6px; }
 
     /* --- Station filter --- */
-    .filter-wrap { position: relative; margin-left: auto; }
+    .filter-wrap { position: relative; }
 
-    #filter-btn, #fc-filter-btn {
+    #filter-btn {
       background: #1e2330;
       border: 1px solid #2d3748;
       color: #94a3b8;
@@ -109,11 +129,11 @@
       cursor: pointer;
       white-space: nowrap;
     }
-    #filter-btn:hover, #fc-filter-btn:hover { border-color: #475569; color: #e2e8f0; }
+    #filter-btn:hover { border-color: #475569; color: #e2e8f0; }
 
-    #filter-panel, #fc-filter-panel {
+    #filter-panel {
       position: absolute;
-      right: 0;
+      left: 0;
       top: calc(100% + 6px);
       background: #1e2330;
       border: 1px solid #2d3748;
@@ -121,13 +141,32 @@
       padding: 10px;
       z-index: 999;
       width: 240px;
-      max-height: 420px;
+      max-height: min(600px, 75vh);
       display: flex;
       flex-direction: column;
       gap: 6px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     }
-    #filter-panel.hidden, #fc-filter-panel.hidden { display: none; }
+    #filter-panel.hidden { display: none; }
+
+    .model-tiles { display: flex; gap: 4px; }
+    .model-tile {
+      background: #1e2330;
+      border: 1px solid #2d3748;
+      color: #475569;
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .model-tile.active {
+      border-color: var(--model-color);
+      color: var(--model-color);
+      background: color-mix(in srgb, var(--model-color) 12%, #1e2330);
+    }
+    .model-tile:hover { border-color: #475569; color: #cbd5e1; }
 
     .filter-actions { display: flex; gap: 6px; }
     .filter-actions button {
@@ -159,6 +198,44 @@
     .filter-name { font-size: 0.8rem; color: #cbd5e1; flex: 1; }
     .filter-elev { font-size: 0.72rem; color: #475569; }
 
+    .range-group { display: flex; align-items: center; gap: 6px; }
+    .range-label { font-size: 0.75rem; color: #475569; white-space: nowrap; }
+    .range-btns { display: flex; gap: 2px; }
+    .range-btns button {
+      background: #1e2330;
+      border: 1px solid #2d3748;
+      color: #64748b;
+      font-size: 0.75rem;
+      padding: 4px 9px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .range-btns button:hover { border-color: #475569; color: #cbd5e1; }
+    .range-btns button.active { background: #1d4ed8; border-color: #3b82f6; color: #e2e8f0; }
+
+    .cloud-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .cloud-panel {
+      border-radius: 8px;
+      border-left: 3px solid var(--model-color, #334155);
+      overflow: hidden;
+    }
+    .cloud-panel-na {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 160px;
+      background: #1a1f2e;
+      border-radius: 8px;
+      border-left: 3px solid var(--model-color, #334155);
+      color: #334155;
+      font-size: 0.8rem;
+    }
+
     footer { font-size: 0.72rem; color: #334155; margin-top: 24px; }
     footer a { color: #475569; }
   </style>
@@ -166,28 +243,51 @@
 <body>
 
 <header>
-  <h1>Revelstoke — Mountain Weather</h1>
-  <div class="filter-wrap">
-    <button id="filter-btn">Stations</button>
-    <div id="filter-panel" class="hidden">
-      <div class="filter-actions">
-        <button id="filter-all">All</button>
-        <button id="filter-none">Clear</button>
+  <div class="header-title">
+    <h1>Revelstoke — Mountain Weather</h1>
+    <span id="updated"></span>
+  </div>
+  <div class="header-controls">
+    <div class="filter-wrap">
+      <button id="filter-btn">Stations</button>
+      <div id="filter-panel" class="hidden">
+        <div class="filter-actions">
+          <button id="filter-all">All</button>
+          <button id="filter-none">Clear</button>
+        </div>
+        <div class="filter-list" id="filter-list"></div>
       </div>
-      <div class="filter-list" id="filter-list"></div>
+    </div>
+    <div class="ctrl-sep"></div>
+    <div class="range-group">
+      <span class="range-label">Location</span>
+      <div class="range-btns" id="fc-location"></div>
+    </div>
+    <div class="range-group">
+      <span class="range-label">Models</span>
+      <div class="model-tiles" id="model-tiles"></div>
+    </div>
+    <div class="ctrl-sep"></div>
+    <div class="range-group">
+      <span class="range-label">History</span>
+      <div class="range-btns" id="hist-range">
+        <button data-h="12">12h</button>
+        <button data-h="24">24h</button>
+        <button data-h="48" class="active">48h</button>
+        <button data-h="72">72h</button>
+      </div>
+    </div>
+    <div class="range-group">
+      <span class="range-label">Forecast</span>
+      <div class="range-btns" id="fc-range">
+        <button data-d="1">1d</button>
+        <button data-d="2">2d</button>
+        <button data-d="3" class="active">3d</button>
+        <button data-d="5">5d</button>
+        <button data-d="7">7d</button>
+      </div>
     </div>
   </div>
-  <div class="filter-wrap">
-    <button id="fc-filter-btn">Forecast</button>
-    <div id="fc-filter-panel" class="hidden">
-      <div class="filter-actions">
-        <button id="fc-filter-all">All</button>
-        <button id="fc-filter-none">Clear</button>
-      </div>
-      <div class="filter-list" id="fc-filter-list"></div>
-    </div>
-  </div>
-  <span id="updated"></span>
 </header>
 
 <div id="status">Loading station data...</div>
@@ -196,6 +296,8 @@
   <button class="tab-btn active" data-tab="temperature">Temperature</button>
   <button class="tab-btn" data-tab="wind">Wind</button>
   <button class="tab-btn" data-tab="precipitation">Precipitation</button>
+  <button class="tab-btn" data-tab="clouds">Clouds</button>
+  <button class="tab-btn" data-tab="pressure">Pressure &amp; Humidity</button>
   <button class="tab-btn" data-tab="map">Map</button>
 </nav>
 
@@ -256,6 +358,42 @@
   </div>
 </div>
 
+<!-- Cloud cover tab -->
+<div id="tab-clouds" class="tab-panel">
+  <div class="chart-container">
+    <h2>Total Cloud Cover — All Models (%)</h2>
+    <div id="chart-cloud-total" style="height:260px;"></div>
+  </div>
+  <div class="chart-container">
+    <h2>Cloud Layers by Altitude — Per Model</h2>
+    <div class="cloud-grid" id="chart-cloud-layers"></div>
+  </div>
+</div>
+
+<!-- Pressure & Humidity tab -->
+<div id="tab-pressure" class="tab-panel">
+  <div class="row">
+    <div class="chart-container">
+      <h2>Relative Humidity — Last 48 Hours (%)</h2>
+      <div id="chart-humidity" style="height:380px;"></div>
+    </div>
+    <div class="chart-container">
+      <h2>Current Humidity by Elevation</h2>
+      <div id="chart-humidity-profile" style="height:380px;"></div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="chart-container">
+      <h2>Mean Sea Level Pressure (hPa)</h2>
+      <div id="chart-pressure" style="height:300px;"></div>
+    </div>
+    <div class="chart-container">
+      <h2>Dewpoint — Forecast (°C)</h2>
+      <div id="chart-dewpoint" style="height:300px;"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Map tab -->
 <div id="tab-map" class="tab-panel">
   <div class="chart-container" style="padding: 0; overflow: hidden;">
@@ -301,12 +439,14 @@ const FORECAST_POINTS = [
   { name: 'Rogers Pass', lat: 51.30, lon: -117.54, color: '#cbd5e1' },
 ];
 const FORECAST_MODELS = [
-  { id: 'best_match',   label: 'Open-Meteo', dash: 'solid'   },
-  { id: 'gfs_seamless', label: 'GFS',        dash: 'dash'    },
-  { id: 'ecmwf_ifs025', label: 'ECMWF',      dash: 'dot'     },
-  { id: 'gem_seamless', label: 'GEM',        dash: 'dashdot' },
+  { id: 'best_match',   label: 'Open-Meteo', dash: 'solid',   color: '#38bdf8' },
+  { id: 'gfs_seamless', label: 'GFS',        dash: 'dash',    color: '#fb923c' },
+  { id: 'ecmwf_ifs025', label: 'ECMWF',      dash: 'dot',     color: '#a78bfa' },
+  { id: 'gem_seamless', label: 'GEM',        dash: 'dashdot', color: '#34d399' },
 ];
 let forecastData = [];
+let histHours = 48;
+let fcDays    = 3;
 
 const LAPSE_RATE = 0.0065; // °C per metre
 
@@ -383,14 +523,27 @@ async function fetchAvalancheStation(station) {
     .filter(r => new Date(r.measurementDateTime) >= cutoff)
     .sort((a, b) => new Date(a.measurementDateTime) - new Date(b.measurementDateTime));
 
+  // Detect reporting interval from timestamp spacing (ms between first two readings).
+  // hourlyPrecip is a rolling 1-hour total — stations that report more frequently
+  // than hourly would overcount on accumulation charts without normalisation.
+  // Scale factor converts each reading to its fraction of an hour so that
+  // summing gives true hourly-equivalent accumulation.
+  let precipScale = 1;
+  if (sorted.length >= 2) {
+    const intervalMs = new Date(sorted[1].measurementDateTime) - new Date(sorted[0].measurementDateTime);
+    const intervalHours = intervalMs / 3_600_000;
+    if (intervalHours > 0 && intervalHours < 1) precipScale = intervalHours;
+  }
+
   return {
     ...station,
-    times:     sorted.map(r => r.measurementDateTime),
+    times:     sorted.map(r => toPacific(r.measurementDateTime)),
     temps:     sorted.map(r => r.airTempAvg ?? null),
     winds:     sorted.map(r => r.windSpeedAvg  != null ? +r.windSpeedAvg.toFixed(1)  : null),
     gusts:     sorted.map(r => r.windSpeedGust != null ? +r.windSpeedGust.toFixed(1) : null),
     winddir:   sorted.map(r => COMPASS_DEG[r.windDirCompass] ?? null),
-    precip:    sorted.map(r => r.hourlyPrecip != null ? Math.max(0, r.hourlyPrecip) : null),
+    precip:    sorted.map(r => r.hourlyPrecip  != null ? Math.max(0, r.hourlyPrecip * precipScale) : null),
+    humidity:  sorted.map(r => r.relativeHumidity ?? null),
     rain:      sorted.map(() => null),
     snowfall:  sorted.map(() => null),
     snowdepth: sorted.map(r => r.snowHeight ?? null),
@@ -401,8 +554,8 @@ async function fetchForecastPoint(pt, model = FORECAST_MODELS[0]) {
   const modelParam = model.id !== 'best_match' ? `&models=${model.id}` : '';
   const url = `https://api.open-meteo.com/v1/forecast`
     + `?latitude=${pt.lat}&longitude=${pt.lon}`
-    + `&hourly=temperature_2m,windspeed_10m,precipitation,freezinglevel_height`
-    + `&forecast_days=3&wind_speed_unit=kmh&timezone=${TZ}${modelParam}`;
+    + `&hourly=temperature_2m,windspeed_10m,precipitation,freezinglevel_height,cloudcover,cloudcover_low,cloudcover_mid,cloudcover_high,pressure_msl,relativehumidity_2m,dewpoint_2m`
+    + `&forecast_days=${fcDays}&wind_speed_unit=kmh&timezone=${TZ}${modelParam}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Forecast HTTP ${res.status} for ${pt.name} / ${model.label}`);
   const data = await res.json();
@@ -414,6 +567,7 @@ async function fetchForecastPoint(pt, model = FORECAST_MODELS[0]) {
   return {
     ...pt,
     name:      `${pt.name} — ${model.label}`,
+    color:     model.color,
     dash:      model.dash,
     elevation: Math.round(data.elevation),
     fcTimes:        future.map(({ i }) => data.hourly.time[i]),
@@ -421,14 +575,26 @@ async function fetchForecastPoint(pt, model = FORECAST_MODELS[0]) {
     fcWinds:        pick(data.hourly.windspeed_10m),
     fcPrecip:       pick(data.hourly.precipitation).map(v => v != null ? Math.max(0, v) : null),
     fcFreezeLevel:  pick(data.hourly.freezinglevel_height),
+    fcCloud:        pick(data.hourly.cloudcover),
+    fcCloudLow:     pick(data.hourly.cloudcover_low),
+    fcCloudMid:     pick(data.hourly.cloudcover_mid),
+    fcCloudHigh:    pick(data.hourly.cloudcover_high),
+    fcPressure:     pick(data.hourly.pressure_msl),
+    fcHumidity:     pick(data.hourly.relativehumidity_2m),
+    fcDewpoint:     pick(data.hourly.dewpoint_2m),
   };
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// Convert any date/string to a Pacific local-time string (no Z suffix) so
+// that all timestamps fed to Plotly share the same interpretation.
+const toPacific = d => new Date(d).toLocaleString('sv-SE', { timeZone: 'America/Vancouver' }).replace(' ', 'T');
+
 function trimTo48h(times, values) {
-  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - histHours * 60 * 60 * 1000);
   const now    = new Date();
   const out = { times: [], values: [] };
   for (let i = 0; i < times.length; i++) {
@@ -477,7 +643,7 @@ function renderSeriesChart(elId, stations, getValues, yLabel, forecasts = [], ge
     hovertemplate: `%{y:.1f} ${yLabel}<extra>${fp.name}</extra>`,
   }));
 
-  const nowStr = new Date().toISOString();
+  const nowStr = toPacific(new Date());
   Plotly.newPlot(elId, [...histTraces, ...fcTraces], {
     ...BASE_LAYOUT,
     margin: { t: 10, r: 10, b: 50, l: 50 },
@@ -727,7 +893,7 @@ function renderWindSeries(elId, stations, forecasts = []) {
     hovertemplate: `%{y:.0f} km/h<extra>${fp.name}</extra>`,
   }));
 
-  const nowStr = new Date().toISOString();
+  const nowStr = toPacific(new Date());
   Plotly.newPlot(elId, [...traces, ...fcTraces], {
     ...BASE_LAYOUT,
     margin: { t: 10, r: 10, b: 50, l: 50 },
@@ -869,8 +1035,12 @@ function splitPhase(precipMM, tempC) {
   return { rainMM: precipMM * rainFrac, snowMM: precipMM * (1 - rainFrac) };
 }
 
+// Stations with known precipitation sensor issues — excluded from precip charts
+const PRECIP_EXCLUDE = new Set([103]); // Clanwilliam: sensor overcounts ~8x
+
 function renderPrecipSeries(stations, forecasts = []) {
   const active = stations.filter(s => {
+    if (PRECIP_EXCLUDE.has(s.stationId)) return false;
     const { values } = trimTo48h(s.times, s.precip);
     return values.some(v => v != null && v > 0);
   });
@@ -905,7 +1075,7 @@ function renderPrecipSeries(stations, forecasts = []) {
     };
   });
 
-  const nowStr = new Date().toISOString();
+  const nowStr = toPacific(new Date());
   Plotly.newPlot('chart-precip-series', [...traces, ...fcTraces], {
     ...BASE_LAYOUT,
     margin: { t: 10, r: 10, b: 100, l: 50 },
@@ -1038,6 +1208,217 @@ function renderSnowLevel(stations) {
 // Map
 // ---------------------------------------------------------------------------
 let leafletMap = null;
+// ---------------------------------------------------------------------------
+// Cloud cover charts (forecast only)
+// ---------------------------------------------------------------------------
+
+// Sky-like colorscale: 0% matches tile background, 100% = white overcast
+const CLOUD_COLORSCALE = [
+  [0,    '#1e2330'],
+  [0.2,  '#1e3248'],
+  [0.45, '#1e4060'],
+  [0.7,  '#5b82a0'],
+  [0.85, '#7a8fa0'],
+  [1,    '#94a3b8'],
+];
+
+function renderCloudCharts(forecasts) {
+  const nowStr   = toPacific(new Date());
+  const nowShape = { type: 'line', xref: 'x', yref: 'paper', x0: nowStr, x1: nowStr, y0: 0, y1: 1, line: { color: '#475569', width: 1, dash: 'dot' } };
+  const nowLabel = { xref: 'x', yref: 'paper', x: nowStr, y: 1, text: 'Now', showarrow: false, font: { size: 9, color: '#64748b' }, xanchor: 'left', yanchor: 'top' };
+  const timeAxis = { ...AXIS_STYLE, type: 'date', tickformat: '%a %d\n%H:%M' };
+
+  // ── Total cloud cover: one filled area per model ─────────────────────────
+  const totalTraces = forecasts.map(fp => {
+    const model = FORECAST_MODELS.find(m => fp.name.endsWith(m.label));
+    return {
+      x: fp.fcTimes, y: fp.fcCloud,
+      name: model?.label ?? fp.name,
+      type: 'scatter', mode: 'lines',
+      fill: 'tozeroy',
+      fillcolor: (model?.color ?? '#64748b') + '22',
+      line: { color: model?.color ?? '#64748b', width: 2, dash: fp.dash === 'solid' ? 'solid' : fp.dash },
+      hovertemplate: '%{y:.0f}%<extra>' + (model?.label ?? fp.name) + '</extra>',
+    };
+  });
+
+  Plotly.newPlot('chart-cloud-total', totalTraces, {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 10, b: 80, l: 50 },
+    showlegend: true,
+    legend: { orientation: 'h', y: -0.28, font: { size: 10, color: '#94a3b8' } },
+    hovermode: 'x unified',
+    shapes: [nowShape],
+    annotations: [nowLabel],
+    xaxis: timeAxis,
+    yaxis: { ...AXIS_STYLE, title: '%', range: [0, 100], ticksuffix: '%' },
+  }, PLOT_DEFAULTS);
+
+  // ── Layer heatmaps: one panel per active model ────────────────────────────
+  const container = document.getElementById('chart-cloud-layers');
+  container.innerHTML = '';
+
+  const Y_LABELS = ['Low  0–2 km', 'Mid  2–6 km', 'High  6 km+'];
+
+  FORECAST_MODELS.forEach(model => {
+    const fp = forecasts.find(f => f.name.endsWith(model.label));
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'cloud-panel';
+    wrapper.style.setProperty('--model-color', model.color);
+
+    // Check if layer data is available (ECMWF returns all-null)
+    const hasData = fp && fp.fcCloudLow && fp.fcCloudLow.some(v => v != null);
+
+    if (!fp || !hasData) {
+      wrapper.className = 'cloud-panel-na';
+      wrapper.style.setProperty('--model-color', model.color);
+      wrapper.textContent = fp ? `${model.label} — layer data not available` : `${model.label} — not selected`;
+      container.appendChild(wrapper);
+      return;
+    }
+
+    const divId = `cloud-heatmap-${model.id}`;
+    const inner = document.createElement('div');
+    inner.id = divId;
+    inner.style.height = '190px';
+    wrapper.appendChild(inner);
+    container.appendChild(wrapper);
+
+    Plotly.newPlot(divId, [{
+      type: 'heatmap',
+      x: fp.fcTimes,
+      y: Y_LABELS,
+      z: [fp.fcCloudLow, fp.fcCloudMid, fp.fcCloudHigh],
+      zmin: 0, zmax: 100,
+      colorscale: CLOUD_COLORSCALE,
+      zsmooth: 'best',
+      showscale: false,
+      hovertemplate: '%{y}: <b>%{z:.0f}%</b><extra>' + model.label + '</extra>',
+    }], {
+      ...BASE_LAYOUT,
+      title: {
+        text: `<b style="color:${model.color}">${model.label}</b>`,
+        font: { size: 11 }, x: 0.02, xanchor: 'left', y: 0.97, yanchor: 'top',
+      },
+      margin: { t: 28, r: 8, b: 40, l: 82 },
+      shapes: [nowShape],
+      annotations: [nowLabel],
+      xaxis: timeAxis,
+      yaxis: { ...AXIS_STYLE, tickfont: { size: 9, color: '#64748b' }, showgrid: false },
+    }, PLOT_DEFAULTS);
+  });
+
+  // Append a shared colour scale legend at the bottom
+  const legend = document.createElement('div');
+  legend.style.cssText = 'grid-column:1/-1; display:flex; align-items:center; gap:8px; padding:6px 4px;';
+  legend.innerHTML = `
+    <span style="font-size:0.72rem;color:#475569">0%</span>
+    <div style="flex:1;height:8px;border-radius:4px;background:linear-gradient(to right,#1e2330,#1e4060,#5b82a0,#94a3b8)"></div>
+    <span style="font-size:0.72rem;color:#475569">100% overcast</span>
+  `;
+  container.appendChild(legend);
+}
+
+// ---------------------------------------------------------------------------
+// Pressure & Humidity charts
+// ---------------------------------------------------------------------------
+function renderPressureHumidity(stations, forecasts) {
+  const nowStr   = toPacific(new Date());
+  const nowShape = { type: 'line', xref: 'x', yref: 'paper', x0: nowStr, x1: nowStr, y0: 0, y1: 1, line: { color: '#475569', width: 1, dash: 'dot' } };
+  const nowLabel = { xref: 'x', yref: 'paper', x: nowStr, y: 1, text: 'Now', showarrow: false, font: { size: 9, color: '#64748b' }, xanchor: 'left', yanchor: 'top' };
+  const timeAxis = { ...AXIS_STYLE, type: 'date', tickformat: '%a %b %d\n%H:%M' };
+  const legendCfg = { orientation: 'h', y: -0.22, font: { size: 10, color: '#94a3b8' } };
+
+  // ── Pressure ─────────────────────────────────────────────────────────────
+  const pressureTraces = forecasts
+    .filter(fp => fp.fcPressure?.some(v => v != null))
+    .map(fp => {
+      const model = FORECAST_MODELS.find(m => fp.name.endsWith(m.label));
+      return {
+        x: fp.fcTimes, y: fp.fcPressure,
+        name: model?.label ?? fp.name,
+        type: 'scatter', mode: 'lines',
+        line: { color: model?.color ?? fp.color, width: 2, dash: fp.dash === 'solid' ? 'solid' : fp.dash },
+        hovertemplate: '%{y:.1f} hPa<extra>' + (model?.label ?? fp.name) + '</extra>',
+      };
+    });
+
+  Plotly.newPlot('chart-pressure', pressureTraces, {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 10, b: 80, l: 60 },
+    showlegend: true, legend: legendCfg,
+    hovermode: 'x unified',
+    shapes: [nowShape], annotations: [nowLabel],
+    xaxis: timeAxis,
+    yaxis: { ...AXIS_STYLE, title: 'hPa' },
+  }, PLOT_DEFAULTS);
+
+  // ── Relative Humidity ─────────────────────────────────────────────────────
+  const humidStations = stations.filter(s => trimTo48h(s.times, s.humidity ?? []).values.some(v => v != null));
+
+  const rhObsTraces = humidStations.map(s => {
+    const { times, values } = trimTo48h(s.times, s.humidity);
+    return {
+      x: times, y: values,
+      name: `${s.name} (${s.elevation}m)`,
+      type: 'scatter', mode: 'lines',
+      line: { color: s.color, width: 2 },
+      hovertemplate: '%{y:.0f}%<extra>' + s.name + '</extra>',
+    };
+  });
+
+  const rhFcTraces = forecasts
+    .filter(fp => fp.fcHumidity?.some(v => v != null))
+    .map(fp => {
+      const model = FORECAST_MODELS.find(m => fp.name.endsWith(m.label));
+      return {
+        x: fp.fcTimes, y: fp.fcHumidity,
+        name: model?.label ?? fp.name,
+        type: 'scatter', mode: 'lines',
+        line: { color: model?.color ?? fp.color, width: 2, dash: fp.dash === 'solid' ? 'dash' : fp.dash },
+        hovertemplate: '%{y:.0f}%<extra>' + (model?.label ?? fp.name) + ' (fc)</extra>',
+      };
+    });
+
+  Plotly.newPlot('chart-humidity', [...rhObsTraces, ...rhFcTraces], {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 10, b: 80, l: 55 },
+    showlegend: false,
+    hovermode: 'x unified',
+    shapes: [nowShape], annotations: [nowLabel],
+    xaxis: timeAxis,
+    yaxis: { ...AXIS_STYLE, title: '%', range: [0, 100], ticksuffix: '%' },
+  }, PLOT_DEFAULTS);
+
+  // ── Humidity by elevation profile ─────────────────────────────────────────
+  renderProfileChart('chart-humidity-profile', humidStations, s => s.humidity, '%');
+
+  // ── Dewpoint ──────────────────────────────────────────────────────────────
+  const dpTraces = forecasts
+    .filter(fp => fp.fcDewpoint?.some(v => v != null))
+    .map(fp => {
+      const model = FORECAST_MODELS.find(m => fp.name.endsWith(m.label));
+      return {
+        x: fp.fcTimes, y: fp.fcDewpoint,
+        name: model?.label ?? fp.name,
+        type: 'scatter', mode: 'lines',
+        line: { color: model?.color ?? fp.color, width: 2, dash: fp.dash === 'solid' ? 'solid' : fp.dash },
+        hovertemplate: '%{y:.1f}°C<extra>' + (model?.label ?? fp.name) + '</extra>',
+      };
+    });
+
+  Plotly.newPlot('chart-dewpoint', dpTraces, {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 10, b: 80, l: 55 },
+    showlegend: true, legend: legendCfg,
+    hovermode: 'x unified',
+    shapes: [nowShape], annotations: [nowLabel],
+    xaxis: timeAxis,
+    yaxis: { ...AXIS_STYLE, title: '°C', zeroline: true, zerolinecolor: '#3d4f6e', zerolinewidth: 1 },
+  }, PLOT_DEFAULTS);
+}
+
 let markerLayer = null;
 
 function renderMap(stations) {
@@ -1197,89 +1578,84 @@ function buildFilterUI() {
 document.getElementById('filter-btn').addEventListener('click', e => {
   e.stopPropagation();
   document.getElementById('filter-panel').classList.toggle('hidden');
-  document.getElementById('fc-filter-panel').classList.add('hidden');
-});
-
-// ---------------------------------------------------------------------------
-// Forecast multi-select (persistent via localStorage)
-// ---------------------------------------------------------------------------
-const FC_FILTER_KEY = 'revyweather-forecasts';
-
-function getFcSelectedNames() {
-  try {
-    const saved = localStorage.getItem(FC_FILTER_KEY);
-    if (saved) return new Set(JSON.parse(saved));
-  } catch {}
-  return new Set(FORECAST_POINTS.flatMap(pt => FORECAST_MODELS.map(m => `${pt.name} — ${m.label}`)));
-}
-
-function getFilteredForecasts() {
-  const names = getFcSelectedNames();
-  return forecastData.filter(fp => names.has(fp.name));
-}
-
-function saveFcSelectedNames(names) {
-  localStorage.setItem(FC_FILTER_KEY, JSON.stringify([...names]));
-}
-
-function buildFcFilterUI() {
-  const list  = document.getElementById('fc-filter-list');
-  const saved = getFcSelectedNames();
-  list.innerHTML = '';
-  forecastData.forEach(fp => {
-    const item = document.createElement('label');
-    item.className = 'filter-item';
-    item.innerHTML = `
-      <input type="checkbox" value="${fp.name}" ${saved.has(fp.name) ? 'checked' : ''}>
-      <span class="filter-dot" style="background:${fp.color}"></span>
-      <span class="filter-name">${fp.name}</span>
-      <span class="filter-elev">${fp.elevation}m</span>
-    `;
-    item.querySelector('input').addEventListener('change', e => {
-      const cur = getFcSelectedNames();
-      if (e.target.checked) cur.add(fp.name);
-      else cur.delete(fp.name);
-      saveFcSelectedNames(cur);
-      updateFcFilterBtn();
-      renderAll();
-    });
-    list.appendChild(item);
-  });
-
-  document.getElementById('fc-filter-all').addEventListener('click', () => {
-    saveFcSelectedNames(new Set(forecastData.map(fp => fp.name)));
-    buildFcFilterUI();
-    updateFcFilterBtn();
-    renderAll();
-  });
-
-  document.getElementById('fc-filter-none').addEventListener('click', () => {
-    saveFcSelectedNames(new Set());
-    buildFcFilterUI();
-    updateFcFilterBtn();
-    renderAll();
-  });
-}
-
-function updateFcFilterBtn() {
-  const names = getFcSelectedNames();
-  const n = forecastData.filter(fp => names.has(fp.name)).length;
-  document.getElementById('fc-filter-btn').textContent = `Forecast (${n} / ${forecastData.length})`;
-}
-
-// Toggle forecast panel
-document.getElementById('fc-filter-btn').addEventListener('click', e => {
-  e.stopPropagation();
-  document.getElementById('fc-filter-panel').classList.toggle('hidden');
-  document.getElementById('filter-panel').classList.add('hidden');
 });
 
 document.addEventListener('click', e => {
   if (!e.target.closest('.filter-wrap')) {
     document.getElementById('filter-panel').classList.add('hidden');
-    document.getElementById('fc-filter-panel').classList.add('hidden');
   }
 });
+
+// ---------------------------------------------------------------------------
+// Forecast location + model selectors (persistent via localStorage)
+// ---------------------------------------------------------------------------
+const FC_POINT_KEY  = 'revyweather-fc-point';
+const FC_MODELS_KEY = 'revyweather-fc-models';
+
+function getSelectedFcPoint() {
+  return localStorage.getItem(FC_POINT_KEY) || FORECAST_POINTS[0].name;
+}
+function saveSelectedFcPoint(name) {
+  localStorage.setItem(FC_POINT_KEY, name);
+}
+function getSelectedFcModels() {
+  try {
+    const saved = localStorage.getItem(FC_MODELS_KEY);
+    if (saved) return new Set(JSON.parse(saved));
+  } catch {}
+  return new Set(FORECAST_MODELS.map(m => m.id));
+}
+function saveSelectedFcModels(ids) {
+  localStorage.setItem(FC_MODELS_KEY, JSON.stringify([...ids]));
+}
+
+function getFilteredForecasts() {
+  const point  = getSelectedFcPoint();
+  const models = getSelectedFcModels();
+  return forecastData.filter(fp => {
+    const ptName = fp.name.replace(/ — .*$/, '');
+    const model  = FORECAST_MODELS.find(m => fp.name.endsWith(m.label));
+    return ptName === point && model && models.has(model.id);
+  });
+}
+
+function buildFcUI() {
+  // Location buttons
+  const locContainer = document.getElementById('fc-location');
+  const activePoint  = getSelectedFcPoint();
+  locContainer.innerHTML = '';
+  FORECAST_POINTS.forEach(pt => {
+    const btn = document.createElement('button');
+    btn.textContent = pt.name;
+    if (pt.name === activePoint) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      saveSelectedFcPoint(pt.name);
+      buildFcUI();
+      renderAll();
+    });
+    locContainer.appendChild(btn);
+  });
+
+  // Model tiles
+  const modelContainer  = document.getElementById('model-tiles');
+  const activeModels    = getSelectedFcModels();
+  modelContainer.innerHTML = '';
+  FORECAST_MODELS.forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'model-tile' + (activeModels.has(m.id) ? ' active' : '');
+    btn.textContent = m.label;
+    btn.style.setProperty('--model-color', m.color);
+    btn.addEventListener('click', () => {
+      const cur = getSelectedFcModels();
+      if (cur.has(m.id)) cur.delete(m.id);
+      else cur.add(m.id);
+      saveSelectedFcModels(cur);
+      buildFcUI();
+      renderAll();
+    });
+    modelContainer.appendChild(btn);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Render all charts from current filter selection
@@ -1299,30 +1675,34 @@ function renderAll() {
 
   renderPrecipSeries(stations, forecasts);
   renderPrecipProfile(stations);
-
+  renderCloudCharts(forecasts);
+  renderPressureHumidity(stations, forecasts);
   renderMap(stations);
 }
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+async function fetchForecasts() {
+  const fcCombos = FORECAST_POINTS.flatMap(pt => FORECAST_MODELS.map(model => ({ pt, model })));
+  forecastData = await Promise.allSettled(fcCombos.map(({ pt, model }) => fetchForecastPoint(pt, model)))
+    .then(results => results.filter(r => r.status === 'fulfilled').map(r => r.value));
+}
+
 async function main() {
   const statusEl  = document.getElementById('status');
   const updatedEl = document.getElementById('updated');
 
   try {
     statusEl.textContent = 'Fetching station data...';
-    const fcCombos = FORECAST_POINTS.flatMap(pt => FORECAST_MODELS.map(model => ({ pt, model })));
-    [allStations, forecastData] = await Promise.all([
+    [allStations] = await Promise.all([
       Promise.all(STATIONS.map(fetchStation)),
-      Promise.allSettled(fcCombos.map(({ pt, model }) => fetchForecastPoint(pt, model)))
-        .then(results => results.filter(r => r.status === 'fulfilled').map(r => r.value)),
+      fetchForecasts(),
     ]);
 
     buildFilterUI();
     updateFilterBtn();
-    buildFcFilterUI();
-    updateFcFilterBtn();
+    buildFcUI();
     renderAll();
 
     const now = new Date().toLocaleString('en-CA', {
@@ -1339,6 +1719,36 @@ async function main() {
     statusEl.classList.add('error');
   }
 }
+
+// History range selector
+document.getElementById('hist-range').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  histHours = +btn.dataset.h;
+  document.querySelectorAll('#hist-range button').forEach(b => b.classList.toggle('active', b === btn));
+  renderAll();
+});
+
+// Forecast range selector — re-fetch needed
+document.getElementById('fc-range').addEventListener('click', async e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const days = +btn.dataset.d;
+  if (days === fcDays) return;
+  fcDays = days;
+  document.querySelectorAll('#fc-range button').forEach(b => b.classList.toggle('active', b === btn));
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'Updating forecast...';
+  try {
+    await fetchForecasts();
+    buildFcUI();
+    renderAll();
+  } catch (err) {
+    statusEl.textContent = `Forecast error: ${err.message}`;
+    return;
+  }
+  statusEl.textContent = '';
+});
 
 main();
 </script>
