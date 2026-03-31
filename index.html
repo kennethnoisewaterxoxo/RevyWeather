@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Revelstoke Weather</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛰️</text></svg>">
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1091,6 +1092,7 @@ function renderPrecipSeries(stations, forecasts = []) {
 
 function renderPrecipProfile(stations) {
   const sorted = stations.filter(s => {
+    if (PRECIP_EXCLUDE.has(s.stationId)) return false;
     const { values } = trimTo48h(s.times, s.precip);
     return values.some(v => v != null && v > 0);
   }).map(s => {
