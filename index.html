@@ -297,6 +297,7 @@
   <button class="tab-btn active" data-tab="temperature">Temperature</button>
   <button class="tab-btn" data-tab="wind">Wind</button>
   <button class="tab-btn" data-tab="precipitation">Precipitation</button>
+  <button class="tab-btn" data-tab="snow">Snow</button>
   <button class="tab-btn" data-tab="clouds">Clouds</button>
   <button class="tab-btn" data-tab="pressure">Pressure &amp; Humidity</button>
   <button class="tab-btn" data-tab="map">Map</button>
@@ -355,6 +356,44 @@
     <div class="chart-container">
       <h2>48hr Accumulation by Elevation</h2>
       <div id="chart-precip-profile" style="height:420px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Snow tab -->
+<div id="tab-snow" class="tab-panel">
+  <div class="tile-row">
+    <div class="tile">
+      <div class="tile-value" id="tile-hs-max">—</div>
+      <div class="tile-label" id="tile-hs-max-label">Deepest Snowpack</div>
+    </div>
+    <div class="tile">
+      <div class="tile-value" id="tile-hs-change">—</div>
+      <div class="tile-label" id="tile-hs-change-label">Biggest Change</div>
+    </div>
+    <div class="tile">
+      <div class="tile-value" id="tile-hs-count">—</div>
+      <div class="tile-label">Stations Reporting Snow Depth</div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="chart-container">
+      <h2>Snow Depth — Last 48 Hours (cm)</h2>
+      <div id="chart-snow-series" style="height:420px;"></div>
+    </div>
+    <div class="chart-container">
+      <h2>Current Snow Depth by Elevation</h2>
+      <div id="chart-snow-profile" style="height:420px;"></div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="chart-container">
+      <h2>Snow Depth Change Over Window (cm)</h2>
+      <div id="chart-snow-change" style="height:340px;"></div>
+    </div>
+    <div class="chart-container">
+      <h2>Forecast Snowfall — Cumulative (cm)</h2>
+      <div id="chart-snow-forecast" style="height:340px;"></div>
     </div>
   </div>
 </div>
@@ -547,7 +586,7 @@ async function fetchAvalancheStation(station) {
     humidity:  sorted.map(r => r.relativeHumidity ?? null),
     rain:      sorted.map(() => null),
     snowfall:  sorted.map(() => null),
-    snowdepth: sorted.map(r => r.snowHeight ?? null),
+    snowdepth: cleanSnowDepth(sorted.map(r => r.snowHeight ?? null)),
   };
 }
 
@@ -555,7 +594,7 @@ async function fetchForecastPoint(pt, model = FORECAST_MODELS[0]) {
   const modelParam = model.id !== 'best_match' ? `&models=${model.id}` : '';
   const url = `https://api.open-meteo.com/v1/forecast`
     + `?latitude=${pt.lat}&longitude=${pt.lon}`
-    + `&hourly=temperature_2m,windspeed_10m,precipitation,freezinglevel_height,cloudcover,cloudcover_low,cloudcover_mid,cloudcover_high,pressure_msl,relativehumidity_2m,dewpoint_2m`
+    + `&hourly=temperature_2m,windspeed_10m,precipitation,freezinglevel_height,snowfall,cloudcover,cloudcover_low,cloudcover_mid,cloudcover_high,pressure_msl,relativehumidity_2m,dewpoint_2m`
     + `&forecast_days=${fcDays}&wind_speed_unit=kmh&timezone=${TZ}${modelParam}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Forecast HTTP ${res.status} for ${pt.name} / ${model.label}`);
@@ -576,6 +615,7 @@ async function fetchForecastPoint(pt, model = FORECAST_MODELS[0]) {
     fcWinds:        pick(data.hourly.windspeed_10m),
     fcPrecip:       pick(data.hourly.precipitation).map(v => v != null ? Math.max(0, v) : null),
     fcFreezeLevel:  pick(data.hourly.freezinglevel_height),
+    fcSnowfall:     pick(data.hourly.snowfall).map(v => v != null ? Math.max(0, v) : null),
     fcCloud:        pick(data.hourly.cloudcover),
     fcCloudLow:     pick(data.hourly.cloudcover_low),
     fcCloudMid:     pick(data.hourly.cloudcover_mid),
@@ -617,6 +657,18 @@ function rangeStats(times, values) {
     min: valid.length ? Math.min(...valid) : undefined,
     max: valid.length ? Math.max(...valid) : undefined,
   };
+}
+
+// Ultrasonic snow-depth sensors are noisy: they drop out, read negative, and
+// throw single-reading spikes when snow is falling or blowing. Drop impossible
+// values, then replace each reading with the median of a small centred window.
+function cleanSnowDepth(raw, half = 2) {
+  const vals = raw.map(v => (v == null || !isFinite(v) || v < 0 || v > 1500) ? null : v);
+  return vals.map((v, i) => {
+    if (v == null) return null;
+    const win = vals.slice(Math.max(0, i - half), i + half + 1).filter(x => x != null).sort((a, b) => a - b);
+    return win[Math.floor(win.length / 2)];
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1209,6 +1261,85 @@ function renderSnowLevel(stations) {
 // ---------------------------------------------------------------------------
 // Map
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Snow depth
+// ---------------------------------------------------------------------------
+// Robust start/end of the window: median of the first/last few valid readings
+function snowWindowStats(s) {
+  const { times, values } = trimTo48h(s.times, s.snowdepth ?? []);
+  const valid = values.map((v, i) => ({ v, t: times[i] })).filter(p => p.v != null);
+  if (!valid.length) return null;
+  const med = arr => { const a = arr.map(p => p.v).sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
+  const start = med(valid.slice(0, 3));
+  const end   = med(valid.slice(-3));
+  return { start, end, change: end - start, current: end };
+}
+
+function renderSnow(stations, forecasts) {
+  const snowStations = stations.filter(s => trimTo48h(s.times, s.snowdepth ?? []).values.some(v => v != null));
+  const stats = snowStations
+    .map(s => ({ s, ...snowWindowStats(s) }))
+    .filter(x => x.current != null)
+    .sort((a, b) => a.s.elevation - b.s.elevation);
+
+  // Tiles
+  const deepest = [...stats].sort((a, b) => b.current - a.current)[0];
+  const biggest = [...stats].sort((a, b) => Math.abs(b.change) - Math.abs(a.change))[0];
+  document.getElementById('tile-hs-max').textContent = deepest ? `${Math.round(deepest.current)} cm` : '—';
+  document.getElementById('tile-hs-max-label').textContent = deepest ? `Deepest — ${deepest.s.name}` : 'Deepest Snowpack';
+  document.getElementById('tile-hs-change').textContent = biggest
+    ? `${biggest.change >= 0 ? '+' : ''}${Math.round(biggest.change)} cm` : '—';
+  document.getElementById('tile-hs-change-label').textContent = biggest
+    ? `${histHours}h Change — ${biggest.s.name}` : 'Biggest Change';
+  document.getElementById('tile-hs-count').textContent = `${stats.length} / ${stations.length}`;
+
+  // Time series + profile
+  renderSeriesChart('chart-snow-series', snowStations, s => s.snowdepth, 'cm');
+  Plotly.relayout('chart-snow-series', { 'yaxis.rangemode': 'tozero' });
+  renderProfileChart('chart-snow-profile', snowStations, s => s.snowdepth, 'Snow Depth (cm)');
+
+  // Change over window, bar per station (ordered by elevation)
+  Plotly.newPlot('chart-snow-change', [{
+    x: stats.map(x => `${x.s.name}<br>${x.s.elevation}m`),
+    y: stats.map(x => +x.change.toFixed(1)),
+    type: 'bar',
+    marker: { color: stats.map(x => x.change >= 0 ? '#38bdf8' : '#f97316') },
+    customdata: stats.map(x => [Math.round(x.start), Math.round(x.end)]),
+    hovertemplate: '%{y:+.0f} cm<br>%{customdata[0]} → %{customdata[1]} cm<extra></extra>',
+  }], {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 10, b: 90, l: 50 },
+    showlegend: false,
+    xaxis: { ...AXIS_STYLE, tickfont: { size: 10 } },
+    yaxis: { ...AXIS_STYLE, title: 'cm', zeroline: true, zerolinecolor: '#64748b', zerolinewidth: 1 },
+    annotations: stats.length ? [] : [{ text: 'No snow depth data', showarrow: false, xref: 'paper', yref: 'paper', x: 0.5, y: 0.5, font: { color: '#475569' } }],
+  }, PLOT_DEFAULTS);
+
+  // Forecast cumulative snowfall per model
+  const fcTraces = forecasts
+    .filter(fp => fp.fcSnowfall?.some(v => v != null))
+    .map(fp => {
+      let acc = 0;
+      return {
+        x: fp.fcTimes,
+        y: fp.fcSnowfall.map(v => +(acc += v ?? 0).toFixed(1)),
+        name: fp.name,
+        type: 'scatter', mode: 'lines',
+        line: { color: fp.color, width: 2, dash: fp.dash ?? 'solid' },
+        hovertemplate: '%{y:.1f} cm<extra>' + fp.name + '</extra>',
+      };
+    });
+  Plotly.newPlot('chart-snow-forecast', fcTraces, {
+    ...BASE_LAYOUT,
+    margin: { t: 10, r: 10, b: 80, l: 50 },
+    showlegend: true,
+    legend: { orientation: 'h', y: -0.25, font: { size: 10, color: '#94a3b8' } },
+    hovermode: 'x unified',
+    xaxis: { ...AXIS_STYLE, type: 'date', tickformat: '%a %b %d\n%H:%M' },
+    yaxis: { ...AXIS_STYLE, title: 'cm', rangemode: 'tozero' },
+  }, PLOT_DEFAULTS);
+}
+
 let leafletMap = null;
 // ---------------------------------------------------------------------------
 // Cloud cover charts (forecast only)
@@ -1441,6 +1572,8 @@ function renderMap(stations) {
     const tempStr  = current != null ? `${current.toFixed(1)}°C` : 'no data';
     const windStat = rangeStats(s.times, s.winds);
     const windStr  = windStat.current != null ? `${windStat.current.toFixed(0)} km/h` : '—';
+    const hsStat   = rangeStats(s.times, s.snowdepth ?? []);
+    const hsStr    = hsStat.current != null ? `${Math.round(hsStat.current)} cm` : '—';
 
     L.circleMarker([s.lat, s.lon], {
       radius: 9,
@@ -1455,7 +1588,8 @@ function renderMap(stations) {
         <b style="color:${s.color}">${s.name}</b><br>
         ${s.elevation}m elevation<br>
         Temp: <b>${tempStr}</b><br>
-        Wind: ${windStr}
+        Wind: ${windStr}<br>
+        Snow depth: ${hsStr}
       </div>
     `)
     .addTo(markerLayer);
@@ -1677,6 +1811,7 @@ function renderAll() {
 
   renderPrecipSeries(stations, forecasts);
   renderPrecipProfile(stations);
+  renderSnow(stations, forecasts);
   renderCloudCharts(forecasts);
   renderPressureHumidity(stations, forecasts);
   renderMap(stations);
