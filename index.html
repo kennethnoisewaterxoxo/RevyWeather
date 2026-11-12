@@ -1558,11 +1558,22 @@ let markerLayer = null;
 function renderMap(stations) {
   if (!leafletMap) {
     leafletMap = L.map('station-map', { zoomControl: true }).setView([51.1, -118.0], 8);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 19,
-    }).addTo(leafletMap);
+    // Keyless basemaps (CARTO now requires an API key)
+    const esriAttr = 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors';
+    const dark = L.layerGroup([
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: esriAttr, maxZoom: 16,
+      }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 16,
+      }),
+    ]);
+    const terrain = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM &mdash; style &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+      subdomains: 'abc', maxZoom: 17,
+    });
+    dark.addTo(leafletMap);
+    L.control.layers({ 'Dark': dark, 'Terrain': terrain }, null, { position: 'topright' }).addTo(leafletMap);
     markerLayer = L.layerGroup().addTo(leafletMap);
   }
 
