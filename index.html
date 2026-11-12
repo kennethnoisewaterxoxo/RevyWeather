@@ -373,7 +373,7 @@
     </div>
     <div class="tile">
       <div class="tile-value" id="tile-hs-count">—</div>
-      <div class="tile-label">Stations Reporting Snow Depth</div>
+      <div class="tile-label">Stations With Snow</div>
     </div>
   </div>
   <div class="row">
@@ -1276,7 +1276,8 @@ function snowWindowStats(s) {
 }
 
 function renderSnow(stations, forecasts) {
-  const snowStations = stations.filter(s => trimTo48h(s.times, s.snowdepth ?? []).values.some(v => v != null));
+  // Skip stations whose sensor reads zero (or nothing) across the whole window — snow-free or not installed
+  const snowStations = stations.filter(s => trimTo48h(s.times, s.snowdepth ?? []).values.some(v => v != null && v > 0));
   const stats = snowStations
     .map(s => ({ s, ...snowWindowStats(s) }))
     .filter(x => x.current != null)
