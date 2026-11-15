@@ -237,8 +237,85 @@
       font-size: 0.8rem;
     }
 
+    .controls-toggle {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      min-height: 38px;
+      background: #1e2330;
+      border: 1px solid #2d3748;
+      color: #cbd5e1;
+      font-size: 0.82rem;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .controls-toggle .summary { color: #64748b; font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .controls-toggle .chev { transition: transform 0.15s; flex-shrink: 0; }
+    header.controls-open .controls-toggle .chev { transform: rotate(180deg); }
+
     footer { font-size: 0.72rem; color: #334155; margin-top: 24px; }
     footer a { color: #475569; }
+
+    /* --- Phone / narrow layout --- */
+    @media (max-width: 760px) {
+      body {
+        padding: 12px max(12px, env(safe-area-inset-right, 0px)) 24px max(12px, env(safe-area-inset-left, 0px));
+      }
+      header { gap: 8px; margin-bottom: 12px; }
+      .header-title { flex-direction: column; align-items: flex-start; gap: 2px; }
+      header h1 { font-size: 1.2rem; }
+      header span { font-size: 0.75rem; }
+
+      /* Controls: one labelled row per group, labels aligned */
+      .header-controls { flex-direction: column; align-items: stretch; gap: 8px; }
+      .ctrl-sep { display: none; }
+      .range-group { gap: 8px; }
+      .range-label { width: 64px; flex-shrink: 0; }
+      .range-btns, .model-tiles { flex-wrap: wrap; gap: 4px; }
+      .range-btns button, .model-tile { min-height: 34px; padding: 6px 12px; font-size: 0.8rem; }
+      #filter-btn { min-height: 36px; width: 100%; text-align: left; }
+      #filter-panel { width: 100%; }
+      .filter-item { padding: 8px 6px; }
+
+      /* Tabs scroll sideways instead of wrapping */
+      .tabs { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; margin-bottom: 12px; }
+      .tabs::-webkit-scrollbar { display: none; }
+      .tab-btn { white-space: nowrap; padding: 10px 14px; flex-shrink: 0; }
+
+      /* Everything stacks to one column */
+      .row { grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 12px; }
+      .row > * { min-width: 0; }
+      .rose-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+      .cloud-grid { grid-template-columns: minmax(0, 1fr); }
+      .chart-container { padding: 12px; margin-bottom: 12px; min-width: 0; }
+      .chart-container h2 { font-size: 0.78rem; margin-bottom: 8px; }
+
+      .tile-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 12px; }
+      .tile { padding: 14px 16px; min-width: 0; }
+      .tile-value { font-size: 1.5rem; }
+      .tile-label { font-size: 0.68rem; }
+
+      /* Shorter charts so each fits on screen */
+      .chart-container > div[id^="chart-"] { height: 300px !important; }
+      #chart-temp-profile, #chart-wind-profile, #chart-precip-profile,
+      #chart-snow-profile, #chart-humidity-profile { height: 360px !important; }
+      #chart-cloud-total, #chart-freeze { height: 240px !important; }
+      #chart-cloud-layers { height: auto !important; }
+      #station-map { height: 70vh !important; min-height: 360px; }
+
+      /* Options collapse behind a toggle so charts are on the first screen */
+      .controls-toggle { display: flex; }
+      header:not(.controls-open) .header-controls { display: none; }
+
+      /* Three tiles fit on one row */
+      .tile-row { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+      .tile { padding: 12px; }
+      .tile-value { font-size: 1.3rem; }
+    }
   </style>
 </head>
 <body>
@@ -248,7 +325,12 @@
     <h1>Revelstoke — Mountain Weather</h1>
     <span id="updated"></span>
   </div>
-  <div class="header-controls">
+  <button class="controls-toggle" id="controls-toggle" aria-expanded="false" aria-controls="header-controls">
+    <span>Options</span>
+    <span class="summary" id="controls-summary"></span>
+    <span class="chev" aria-hidden="true">▾</span>
+  </button>
+  <div class="header-controls" id="header-controls">
     <div class="filter-wrap">
       <button id="filter-btn">Stations</button>
       <div id="filter-panel" class="hidden">
@@ -498,6 +580,21 @@ const COMPASS_DEG = {
 const TZ = 'America%2FVancouver';
 
 const PLOT_DEFAULTS = { responsive: true, displayModeBar: false };
+
+// On phones, a finger drag on a chart should scroll the page, not zoom the
+// chart. Turn off drag-zoom for every chart on narrow screens; tapping still
+// shows values.
+const IS_NARROW = window.matchMedia('(max-width: 760px)');
+(() => {
+  const newPlot = Plotly.newPlot.bind(Plotly);
+  Plotly.newPlot = (el, data, layout = {}, config) => {
+    if (IS_NARROW.matches) {
+      layout = { ...layout, dragmode: false };
+      if (layout.margin) layout.margin = { ...layout.margin, r: Math.min(layout.margin.r ?? 10, 10) };
+    }
+    return newPlot(el, data, layout, config);
+  };
+})();
 
 const BASE_LAYOUT = {
   paper_bgcolor: '#1e2330',
@@ -1808,7 +1905,21 @@ function buildFcUI() {
 // ---------------------------------------------------------------------------
 // Render all charts from current filter selection
 // ---------------------------------------------------------------------------
+// Phone-only options toggle: show what's selected while the panel is closed
+function updateControlsSummary() {
+  const el = document.getElementById('controls-summary');
+  if (!el) return;
+  const n = getFilteredStations().length;
+  el.textContent = `${n} station${n === 1 ? '' : 's'} · ${getSelectedFcPoint()} · ${histHours}h / ${fcDays}d`;
+}
+document.getElementById('controls-toggle').addEventListener('click', () => {
+  const header = document.querySelector('header');
+  const open = header.classList.toggle('controls-open');
+  document.getElementById('controls-toggle').setAttribute('aria-expanded', open);
+});
+
 function renderAll() {
+  updateControlsSummary();
   const stations  = getFilteredStations();
   const forecasts = getFilteredForecasts();
   if (!stations.length) return;
